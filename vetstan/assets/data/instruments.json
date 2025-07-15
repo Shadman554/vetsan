@@ -1,0 +1,364 @@
+{
+  "instruments": [
+    {
+      "id": 1,
+      "name_en": "Adson Brown Forceps",
+      "name_ku": "مەقەستی ئادسۆن براون",
+      "image_path": "assets/instruments/Adson Brown Forceps.png",
+      "description_en": "A precise surgical instrument used for grasping and manipulating delicate tissues. Features fine, serrated tips for secure grip during surgical procedures.",
+      "description_ku": "ئامێرێکی نەشتەرگەری وردە کە بۆ گرتن و جوڵاندنی شانەی ناسک بەکاردێت. خاوەن نووکی ددانەداری وردە بۆ گرتنێکی پارێزراو لە کاتی نەشتەرگەریدا."
+    },
+    {
+      "id": 2,
+      "name_en": "Allis Tissue Forceps",
+      "name_ku": "مەقەستی شانەیی ئالیس",
+      "image_path": "assets/instruments/Allis Tissue forceps.jpg",
+      "description_en": "Surgical forceps with multiple sharp teeth used for gripping and holding tissue firmly during procedures.",
+      "description_ku": "مەقەستی نەشتەرگەری بە چەندین ددانی تیژەوە کە بۆ گرتن و هێشتنەوەی شانە بە توندی بەکاردێت لە کاتی نەشتەرگەریدا."
+    },
+    {
+      "id": 3,
+      "name_en": "Armytage Forceps",
+      "name_ku": "مەقەستی ئارمیتاج",
+      "image_path": "assets/instruments/Armytage (Green armytage).jpg",
+      "description_en": "Specialized forceps used in veterinary surgery, particularly useful for tissue manipulation and dissection.",
+      "description_ku": "مەقەستی تایبەت کە لە نەشتەرگەری ڤێتێرنەری بەکاردێت، بەتایبەتی سوودبەخشە بۆ جوڵاندن و لێکردنەوەی شانە."
+    },
+    {
+      "id": 4,
+      "name_en": "Artery Forceps",
+      "name_ku": "مەقەستی دەمار",
+      "image_path": "assets/instruments/Artery.jpg",
+      "description_en": "Essential surgical instrument used for clamping blood vessels and controlling bleeding during surgery.",
+      "description_ku": "ئامێرێکی نەشتەرگەری گرنگە کە بۆ گرتنی دەمارەکانی خوێن و کۆنترۆڵکردنی خوێنبەربوون بەکاردێت لە کاتی نەشتەرگەریدا."
+    },
+    {
+      "id": 5,
+      "name_en": "Babcock Forceps",
+      "name_ku": "مەقەستی بابکۆک",
+      "image_path": "assets/instruments/Babcock.jpg",
+      "description_en": "Atraumatic surgical forceps designed for gentle handling of delicate tissues without causing damage.",
+      "description_ku": "مەقەستی نەشتەرگەری نەرم کە بۆ مامەڵەکردنی هێمنانە لەگەڵ شانە ناسکەکان دیزاین کراوە بەبێ دروستکردنی زیان."
+    },
+    {
+      "id": 6,
+      "name_en": "Bandage Scissors",
+      "name_ku": "مەقەستی باندێج",
+      "image_path": "assets/instruments/Bandage scissor.jpg",
+      "description_en": "Specialized scissors with a blunt tip designed for safely cutting bandages and dressings.",
+      "description_ku": "مەقەستی تایبەت بە نووکی کول کە بۆ بڕینی سەلامەتی باندێج و پێچانەوە دیزاین کراوە."
+    },
+    {
+      "id": 7,
+      "name_en": "Bayonet Forceps",
+      "name_ku": "مەقەستی بایۆنێت",
+      "image_path": "assets/instruments/Bayonet forceps.jpg",
+      "description_en": "Angled forceps that provide better visibility and access during deep cavity procedures.",
+      "description_ku": "مەقەستی گۆشەدار کە دیدێکی باشتر و دەستگەیشتن دابین دەکات لە کاتی پرۆسەکانی بۆشایی قوڵدا."
+    },
+    {
+      "id": 8,
+      "name_en": "Surgical Blade",
+      "name_ku": "چەقۆی نەشتەرگەری",
+      "image_path": "assets/instruments/Blade.png",
+      "description_en": "Sharp, disposable surgical blade used for making precise incisions during surgery.",
+      "description_ku": "چەقۆی نەشتەرگەری تیژ و فڕێدراو کە بۆ بڕینی ورد بەکاردێت لە کاتی نەشتەرگەریدا."
+    },
+    {
+      "id": 9,
+      "name_en": "Burnisher",
+      "name_ku": "پرداخکەر",
+      "image_path": "assets/instruments/Burnisher.jpg",
+      "description_en": "Dental instrument used for smoothing and polishing surfaces.",
+      "description_ku": "ئامێری ددان کە بۆ لووسکردن و پرداخکردنی ڕووەکان بەکاردێت."
+    },
+    {
+      "id": 10,
+      "name_en": "Carmalt Forceps",
+      "name_ku": "مەقەستی کارمالت",
+      "image_path": "assets/instruments/Carmalt Forceps.png",
+      "description_en": "Heavy-duty surgical forceps with serrated jaws for secure gripping of tissues.",
+      "description_ku": "مەقەستی نەشتەرگەری قورس بە دەمی ددانەدار بۆ گرتنی پارێزراوی شانەکان."
+    },
+    {
+      "id": 11,
+      "name_en": "Cheatle Forceps",
+      "name_ku": "مەقەستی چیتڵ",
+      "image_path": "assets/instruments/Cheatle forceps.jpg",
+      "description_en": "Sterilized forceps used for transferring sterile items without contamination.",
+      "description_ku": "مەقەستی ستەریل کە بۆ گواستنەوەی کەرەستە ستەریلەکان بەکاردێت بەبێ پیسبوون."
+    },
+    {
+      "id": 12,
+      "name_en": "Clip Applicator",
+      "name_ku": "دانەری کلیپ",
+      "image_path": "assets/instruments/Clip applicator.png",
+      "description_en": "Instrument used for applying surgical clips to blood vessels or tissues.",
+      "description_ku": "ئامێرێک کە بۆ دانانی کلیپی نەشتەرگەری لەسەر دەمارەکانی خوێن یان شانەکان بەکاردێت."
+    },
+    {
+      "id": 13,
+      "name_en": "Curved Mayo Scissors",
+      "name_ku": "مەقەستی مایۆی چەماوە",
+      "image_path": "assets/instruments/Curved mayo scissor.png",
+      "description_en": "Curved surgical scissors for cutting through thick tissues and sutures.",
+      "description_ku": "مەقەستی نەشتەرگەری چەماوە بۆ بڕینی شانە ئەستوورەکان و دروومان."
+    },
+    {
+      "id": 14,
+      "name_en": "Cusco's Speculum",
+      "name_ku": "سپیکیولەمی کاسکۆ",
+      "image_path": "assets/instruments/Cusco's speculum.jpg",
+      "description_en": "Vaginal speculum used for examination and procedures.",
+      "description_ku": "سپیکیولەمی زێ کە بۆ پشکنین و پرۆسەکان بەکاردێت."
+    },
+    {
+      "id": 15,
+      "name_en": "Deaver Retractor",
+      "name_ku": "ڕاکێشەری دیڤەر",
+      "image_path": "assets/instruments/Deaver Retractor.jpg",
+      "description_en": "Large retractor used for holding back tissue during abdominal surgery.",
+      "description_ku": "ڕاکێشەری گەورە کە بۆ دواوە گرتنی شانە لە کاتی نەشتەرگەری سکدا بەکاردێت."
+    },
+    {
+      "id": 16,
+      "name_en": "Knife Handle",
+      "name_ku": "دەستکی چەقۆ",
+      "image_path": "assets/instruments/Knife Handle.png",
+      "description_en": "Ergonomic handle designed to hold surgical blades securely.",
+      "description_ku": "دەستکێکی ئێرگۆنۆمی دیزاین کراوە بۆ گرتنی چەقۆی نەشتەرگەری بە شێوەیەکی پارێزراو."
+    },
+    {
+      "id": 17,
+      "name_en": "Mayo-Hagar Needle Holder",
+      "name_ku": "دەرزی گری مایۆ-هاگار",
+      "image_path": "assets/instruments/Mayo-Hagar Needle Holder.png",
+      "description_en": "Specialized surgical instrument used for gripping and manipulating suture needles during wound closure.",
+      "description_ku": "ئامێرێکی نەشتەرگەری تایبەت کە بۆ گرتن و جوڵاندنی دەرزی دروومان لە کاتی داخستنی برین بەکاردێت."
+    },
+    {
+      "id": 18,
+      "name_en": "Microscope",
+      "name_ku": "مایکرۆسکۆپ",
+      "image_path": "assets/instruments/Microscope.png",
+      "description_en": "Optical instrument used for detailed examination of specimens and tissues.",
+      "description_ku": "ئامێری ئۆپتیکی کە بۆ پشکنینی وردی نموونە و شانەکان بەکاردێت."
+    },
+    {
+      "id": 19,
+      "name_en": "Mosquito Forceps",
+      "name_ku": "مەقەستی مۆسکیتۆ",
+      "image_path": "assets/instruments/Mosquito.png",
+      "description_en": "Small, delicate hemostatic forceps used for clamping small blood vessels.",
+      "description_ku": "مەقەستی بچووک و ناسکی هیمۆستاتیک کە بۆ گرتنی دەمارە خوێنە بچووکەکان بەکاردێت."
+    },
+    {
+      "id": 20,
+      "name_en": "Mouth Gag",
+      "name_ku": "کەرەوەی دەم",
+      "image_path": "assets/instruments/Mouth gag.png",
+      "description_en": "Device used to keep an animal's mouth open during oral examination or procedures.",
+      "description_ku": "ئامێرێک کە بۆ کراوە هێشتنەوەی دەمی ئاژەڵ بەکاردێت لە کاتی پشکنین یان پرۆسەی دەمدا."
+    },
+    {
+      "id": 21,
+      "name_en": "Nasal Forceps",
+      "name_ku": "مەقەستی لووت",
+      "image_path": "assets/instruments/Nasal forceps.jpg",
+      "description_en": "Long, narrow forceps designed for nasal procedures and examinations.",
+      "description_ku": "مەقەستی درێژ و تەسک کە بۆ پرۆسە و پشکنینەکانی لووت دیزاین کراوە."
+    },
+    {
+      "id": 22,
+      "name_en": "Nasal Speculum",
+      "name_ku": "سپیکیولەمی لووت",
+      "image_path": "assets/instruments/Nasal speculum.jpg",
+      "description_en": "Instrument used to examine the nasal cavity by dilating the nostrils.",
+      "description_ku": "ئامێرێک کە بۆ پشکنینی بۆشایی لووت بەکاردێت بە فراوانکردنی کونە لووت."
+    },
+    {
+      "id": 23,
+      "name_en": "Needle Holder",
+      "name_ku": "دەرزی گر",
+      "image_path": "assets/instruments/Needle holder.jpg",
+      "description_en": "Surgical instrument used for holding and manipulating suture needles.",
+      "description_ku": "ئامێری نەشتەرگەری کە بۆ گرتن و جوڵاندنی دەرزی دروومان بەکاردێت."
+    },
+    {
+      "id": 24,
+      "name_en": "Negus Forceps",
+      "name_ku": "مەقەستی نیگەس",
+      "image_path": "assets/instruments/Negus.jpg",
+      "description_en": "Specialized forceps used in tonsil and adenoid procedures.",
+      "description_ku": "مەقەستی تایبەت کە لە پرۆسەکانی لەوزەتێن و ئەدینۆید بەکاردێت."
+    },
+    {
+      "id": 25,
+      "name_en": "Probe",
+      "name_ku": "پرۆب",
+      "image_path": "assets/instruments/Probe.jpg",
+      "description_en": "Slender instrument used for exploring wounds or anatomical structures.",
+      "description_ku": "ئامێری باریک کە بۆ پشکنینی برین یان پێکهاتە ئەناتۆمیەکان بەکاردێت."
+    },
+    {
+      "id": 26,
+      "name_en": "Proctoscope",
+      "name_ku": "پرۆکتۆسکۆپ",
+      "image_path": "assets/instruments/Proctoscope.png",
+      "description_en": "Instrument used for examining the rectum and lower colon.",
+      "description_ku": "ئامێرێک کە بۆ پشکنینی کۆم و کۆڵۆنی خوارەوە بەکاردێت."
+    },
+    {
+      "id": 27,
+      "name_en": "Self Retractor",
+      "name_ku": "ڕاکێشەری خۆکار",
+      "image_path": "assets/instruments/Self retractor.jpg",
+      "description_en": "Surgical retractor that maintains its position without manual holding.",
+      "description_ku": "ڕاکێشەری نەشتەرگەری کە شوێنی خۆی دەپارێزێت بەبێ گرتنی دەستی."
+    },
+    {
+      "id": 28,
+      "name_en": "Skin Staple Remover",
+      "name_ku": "لابەری ستاپڵی پێست",
+      "image_path": "assets/instruments/Skin staple remover.jpg",
+      "description_en": "Tool used for safely removing surgical staples from healed wounds.",
+      "description_ku": "ئامێرێک کە بۆ لابردنی سەلامەتی ستاپڵی نەشتەرگەری لە برینە چاکبووەکان بەکاردێت."
+    },
+    {
+      "id": 29,
+      "name_en": "Skin Stapler",
+      "name_ku": "ستاپڵەری پێست",
+      "image_path": "assets/instruments/Skin stapler.jpg",
+      "description_en": "Device used for quickly closing wounds using surgical staples.",
+      "description_ku": "ئامێرێک کە بۆ داخستنی خێرای برین بە بەکارهێنانی ستاپڵی نەشتەرگەری بەکاردێت."
+    },
+    {
+      "id": 30,
+      "name_en": "Sponge Bowl",
+      "name_ku": "کاسەی سپۆنج",
+      "image_path": "assets/instruments/Sponge bowl.jpg",
+      "description_en": "Sterile bowl used for holding surgical sponges and solutions.",
+      "description_ku": "کاسەی ستەریل کە بۆ هەڵگرتنی سپۆنج و شلەمەنی نەشتەرگەری بەکاردێت."
+    },
+    {
+      "id": 31,
+      "name_en": "Sponge Holder",
+      "name_ku": "هەڵگری سپۆنج",
+      "image_path": "assets/instruments/Sponge holder.jpg",
+      "description_en": "Forceps designed for holding and manipulating surgical sponges.",
+      "description_ku": "مەقەستێک کە بۆ گرتن و جوڵاندنی سپۆنجی نەشتەرگەری دیزاین کراوە."
+    },
+    {
+      "id": 32,
+      "name_en": "Stethoscope",
+      "name_ku": "ستیسکۆپ",
+      "image_path": "assets/instruments/Stethscope.jpg",
+      "description_en": "Acoustic medical device for listening to internal sounds of an animal's body.",
+      "description_ku": "ئامێری پزیشکی دەنگی بۆ گوێگرتن لە دەنگە ناوەکیەکانی لەشی ئاژەڵ."
+    },
+    {
+      "id": 33,
+      "name_en": "Straight Mayo Scissors",
+      "name_ku": "مەقەستی مایۆی ڕاست",
+      "image_path": "assets/instruments/Straight mayo scissor.jpg",
+      "description_en": "Strong, straight surgical scissors used for cutting thick tissues.",
+      "description_ku": "مەقەستی نەشتەرگەری بەهێز و ڕاست کە بۆ بڕینی شانە ئەستوورەکان بەکاردێت."
+    },
+    {
+      "id": 34,
+      "name_en": "Thermometer",
+      "name_ku": "پلەپێو",
+      "image_path": "assets/instruments/Thermometer.jpg",
+      "description_en": "Device used for measuring body temperature.",
+      "description_ku": "ئامێرێک کە بۆ پێوانی پلەی گەرمی لەش بەکاردێت."
+    },
+    {
+      "id": 35,
+      "name_en": "Tongue Depressor",
+      "name_ku": "داگری زمان",
+      "image_path": "assets/instruments/Tongue depressor.png",
+      "description_en": "Flat wooden or plastic tool used to hold down the tongue during oral examination.",
+      "description_ku": "ئامێری تەختی داری یان پلاستیکی کە بۆ داگرتنی زمان بەکاردێت لە کاتی پشکنینی دەمدا."
+    },
+    {
+      "id": 36,
+      "name_en": "Tonsil Dissector",
+      "name_ku": "جیاکەرەوەی لەوزەتێن",
+      "image_path": "assets/instruments/Tonsil dissector (pillar retractor).jpg",
+      "description_en": "Surgical instrument used for separating and retracting tissues during tonsil surgery.",
+      "description_ku": "ئامێری نەشتەرگەری کە بۆ جیاکردنەوە و ڕاکێشانی شانەکان بەکاردێت لە کاتی نەشتەرگەری لەوزەتێندا."
+    },
+    {
+      "id": 37,
+      "name_en": "Tonsil Holder",
+      "name_ku": "گری لەوزەتێن",
+      "image_path": "assets/instruments/Tonsil holder (tonsil holding).jpg",
+      "description_en": "Forceps designed specifically for gripping and manipulating tonsil tissue.",
+      "description_ku": "مەقەستێک کە بەتایبەتی بۆ گرتن و جوڵاندنی شانەی لەوزەتێن دیزاین کراوە."
+    },
+    {
+      "id": 38,
+      "name_en": "Tonsil Scissors",
+      "name_ku": "مەقەستی لەوزەتێن",
+      "image_path": "assets/instruments/Tonsil scissor.jpg",
+      "description_en": "Specialized scissors used in tonsillectomy procedures.",
+      "description_ku": "مەقەستی تایبەت کە لە پرۆسەکانی دەرهێنانی لەوزەتێن بەکاردێت."
+    },
+    {
+      "id": 39,
+      "name_en": "Toothed Tissue Forceps",
+      "name_ku": "مەقەستی شانەیی ددانەدار",
+      "image_path": "assets/instruments/Toothed tissue forceps.jpg",
+      "description_en": "Forceps with teeth for secure gripping of tissues during surgery.",
+      "description_ku": "مەقەست بە ددانەوە بۆ گرتنی پارێزراوی شانەکان لە کاتی نەشتەرگەریدا."
+    },
+    {
+      "id": 40,
+      "name_en": "Towel Clips",
+      "name_ku": "گیرەی خاولی",
+      "image_path": "assets/instruments/Towel clips.png",
+      "description_en": "Sharp-pointed clips used to secure surgical drapes and towels.",
+      "description_ku": "گیرەی نووک تیژ کە بۆ دڵنیابوون لە جێگیری پەردە و خاولی نەشتەرگەری بەکاردێت."
+    },
+    {
+      "id": 41,
+      "name_en": "Trocar and Cannula",
+      "name_ku": "ترۆکار و کانولا",
+      "image_path": "assets/instruments/Trocar and cannula.png",
+      "description_en": "Surgical instruments used to create and maintain access ports in minimally invasive surgery.",
+      "description_ku": "ئامێری نەشتەرگەری کە بۆ دروستکردن و پاراستنی دەروازەی دەستگەیشتن لە نەشتەرگەری کەمترین داگیرکاری بەکاردێت."
+    },
+    {
+      "id": 42,
+      "name_en": "Tweezers",
+      "name_ku": "مووچین",
+      "image_path": "assets/instruments/Tweezer.jpg",
+      "description_en": "Small forceps used for precise handling of small objects or tissues.",
+      "description_ku": "مەقەستی بچووک کە بۆ مامەڵەکردنی ورد لەگەڵ شت یان شانەی بچووک بەکاردێت."
+    },
+    {
+      "id": 43,
+      "name_en": "Umbilical Cord Scissors",
+      "name_ku": "مەقەستی پەتی ناوک",
+      "image_path": "assets/instruments/Umbilical cord scissor.jpg",
+      "description_en": "Specialized scissors designed for cutting umbilical cords.",
+      "description_ku": "مەقەستی تایبەت کە بۆ بڕینی پەتی ناوک دیزاین کراوە."
+    },
+    {
+      "id": 44,
+      "name_en": "Uterine Sound",
+      "name_ku": "پشکێنەری منداڵدان",
+      "image_path": "assets/instruments/Uterine Sound.jpg",
+      "description_en": "Long, slender instrument used to measure the depth of the uterus.",
+      "description_ku": "ئامێری درێژ و باریک کە بۆ پێوانی قوڵایی منداڵدان بەکاردێت."
+    },
+    {
+      "id": 45,
+      "name_en": "Uterine Curette",
+      "name_ku": "کورێتی منداڵدان",
+      "image_path": "assets/instruments/Uterine curette.jpg",
+      "description_en": "Surgical instrument used for scraping or cleaning the walls of the uterus.",
+      "description_ku": "ئامێری نەشتەرگەری کە بۆ ڕنین یان پاککردنەوەی دیوارەکانی منداڵدان بەکاردێت."
+    }
+  ]
+}
