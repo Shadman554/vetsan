@@ -104,4 +104,88 @@ class ApiService {
     final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
     return jsonData.map((e) => NormalRange.fromJson(e as Map<String, dynamic>)).toList();
   }
+
+  // Incremental sync methods
+  Future<List<Word>> fetchDictionaryUpdates({String? since}) async {
+    String url = '$_baseUrl/api/dictionary';
+    if (since != null) {
+      url += '?since=$since';
+    }
+    
+    final uri = Uri.parse(url);
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load dictionary updates – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Word.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Disease>> fetchDiseaseUpdates({String? since}) async {
+    String url = '$_baseUrl/api/diseases';
+    if (since != null) {
+      url += '?since=$since';
+    }
+    
+    final uri = Uri.parse(url);
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load disease updates – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Disease.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Drug>> fetchDrugUpdates({String? since}) async {
+    String url = '$_baseUrl/api/drugs';
+    if (since != null) {
+      url += '?since=$since';
+    }
+    
+    final uri = Uri.parse(url);
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load drug updates – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Drug.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Book>> fetchBookUpdates({String? since}) async {
+    String url = '$_baseUrl/api/books/';
+    if (since != null) {
+      url += '?since=$since';
+    }
+    
+    final uri = Uri.parse(url);
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load book updates – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Book.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<Map<String, dynamic>> checkForUpdates() async {
+    final uri = Uri.parse('$_baseUrl/api/updates/check');
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to check for updates – status ${response.statusCode}');
+    }
+
+    return json.decode(response.body) as Map<String, dynamic>;
+  }
 }

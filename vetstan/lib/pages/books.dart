@@ -884,7 +884,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
                 )
               else if (_cachedPdfData != null || _isPdfLoadedFromFile) // Check for both in-memory and file-streamed
                 Container(
-                  color: backgroundColor,
+                  color: Colors.white,
                   child: ColorFiltered(
                     colorFilter: _isDarkMode
                         ? const ColorFilter.matrix([

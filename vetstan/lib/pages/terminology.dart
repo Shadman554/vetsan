@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../database/database_helper.dart';
+import 'dart:async';
 import '../services/sync_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -75,7 +75,9 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _checkAndSyncData();
+    _loadTerminologyData();
+    _checkForUpdates();
+    _startPeriodicSync();
   }
 
   @override
@@ -85,31 +87,9 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
     super.dispose();
   }
 
-  Future<void> _checkAndSyncData() async {
+  Future<void> _loadTerminologyData() async {
     try {
-      final db = await DatabaseHelper().database;
-      final List<Map<String, dynamic>> existingData = await db.query('dictionary');
-      
-      if (existingData.isEmpty) {
-        await _syncService.syncAll();
-      }
-      
-      await _fetchTerminology();
-    } catch (e) {
-      print('Error checking/syncing data: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _fetchTerminology() async {
-    try {
-      final db = await DatabaseHelper().database;
-      final List<Map<String, dynamic>> maps = await db.query('dictionary');
-      final terminologyList = maps.map((map) => Word.fromJson(map)).toList();
+      final terminologyList = await _syncService.loadCategoryData<Word>('dictionary');
       if (mounted) {
         setState(() {
           _terminology = terminologyList;
@@ -118,12 +98,29 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
         });
       }
     } catch (e) {
+      print('Error loading terminology: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
-      print('Error fetching terminology: $e');
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Check for updates in the background (no loading screen)
+    final hasUpdates = await _syncService.checkForCategoryUpdates('dictionary');
+    if (hasUpdates && mounted) {
+      // Refresh the data silently
+      final updatedData = await _syncService.loadCategoryData<Word>('dictionary');
+      setState(() {
+        _terminology = updatedData;
+        _filteredTerminology = _terminology.where((terminology) =>
+            terminology.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+            terminology.kurdish.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+            terminology.arabic.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+            terminology.description.toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+      });
     }
   }
 
@@ -223,10 +220,30 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
       ),
       body: _isLoading
           ? Center(
-              child: CircularProgressIndicator(
-                color: themeProvider.isDarkMode
-                    ? themeProvider.theme.colorScheme.primary
-                    : Colors.blue,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: themeProvider.isDarkMode
+                        ? themeProvider.theme.colorScheme.primary
+                        : Colors.blue,
+                  ),
+                  SizedBox(height: 16),
+                  StreamBuilder<String>(
+                    stream: _syncService.statusStream,
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data ?? 'Loading terminology...',
+                        style: TextStyle(
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             )
           : _filteredTerminology.isEmpty
@@ -344,5 +361,31 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
                   ),
                 ),
     );
+  }
+
+  Future<void> _startPeriodicSync() async {
+    // Check for updates every 30 seconds in background
+    Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (mounted) {
+        try {
+          final hasUpdates = await _syncService.checkForCategoryUpdates('dictionary');
+          if (hasUpdates && mounted) {
+            // Update data silently without showing loading
+            final updatedData = _syncService.getCachedDictionary().cast<Word>();
+            setState(() {
+              _terminology = updatedData;
+              _filteredTerminology = _terminology.where((terminology) =>
+                  terminology.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+                  terminology.kurdish.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+                  terminology.arabic.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+                  terminology.description.toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+            });
+          }
+        } catch (e) {
+          // Silent fail for background sync
+          print('Background sync error: $e');
+        }
+      }
+    });
   }
 }

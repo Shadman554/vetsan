@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/font_size_provider.dart';
+import 'services/sync_service.dart'; // Import the SyncService
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -17,7 +18,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
-    
+
     return Scaffold(
       backgroundColor: themeProvider.theme.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -61,6 +62,13 @@ class _SettingsPageState extends State<SettingsPage> {
             title:languageProvider.translate('About'),
             children: [
               _buildAboutTile(),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _buildSettingsSection(
+            title: languageProvider.translate('Sync'),
+            children: [
+              _buildSyncOptions(),
             ],
           ),
       ],
@@ -139,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final fontSizeProvider = Provider.of<FontSizeProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
-  
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
@@ -258,5 +266,139 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildSyncOptions() {
+    Provider.of<ThemeProvider>(context);
+    final fontSizeProvider = Provider.of<FontSizeProvider>(context);
+    double fontSize = fontSizeProvider.fontSize * 16;
+
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.sync),
+          title: Text(
+            'Check for Updates',
+            style: TextStyle(fontSize: fontSize),
+          ),
+          subtitle: Text(
+            'Check for new data and sync only updates',
+            style: TextStyle(fontSize: fontSize - 2),
+          ),
+          onTap: () => _checkForUpdates(context),
+        ),
+        ListTile(
+          leading: const Icon(Icons.refresh),
+          title: Text(
+            'Force Sync All Data',
+            style: TextStyle(fontSize: fontSize),
+          ),
+          subtitle: Text(
+            'Download all data from server (This will replace local data)',
+            style: TextStyle(fontSize: fontSize - 2),
+          ),
+          onTap: () => _showSyncDialog(context),
+        ),
+      ],
+    );
+  }
+
+  void _checkForUpdates(BuildContext context) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    try {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Checking for updates...')),
+      );
+
+      final syncService = SyncService();
+      
+      // Force check all categories for updates
+      final categories = ['dictionary', 'diseases', 'drugs', 'books'];
+      bool hasAnyUpdates = false;
+      
+      for (String category in categories) {
+        try {
+          final hasUpdates = await syncService.checkForCategoryUpdates(category);
+          if (hasUpdates) {
+            hasAnyUpdates = true;
+          }
+        } catch (e) {
+          print('Error checking $category: $e');
+        }
+      }
+
+      if (hasAnyUpdates) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text('Updates found and synchronized!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('No new updates available')),
+        );
+      }
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Error checking for updates: $e')),
+      );
+    }
+  }
+
+  void _showSyncDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Force Sync All Data'),
+          content: const Text(
+              'This will download all data from the server and replace your local data. This process may take a few minutes. Continue?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Sync'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _performSync(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _performSync(BuildContext context) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    try {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Starting full sync...')),
+      );
+
+      final syncService = SyncService();
+      await syncService.forceFullSync();
+
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Full sync completed successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Error during full sync: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

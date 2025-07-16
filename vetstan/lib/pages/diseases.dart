@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import 'dart:async';
+import '../services/sync_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/favorites_provider.dart';
@@ -63,7 +64,7 @@ class DiseasesPage extends StatefulWidget {
 }
 
 class _DiseasesPageState extends State<DiseasesPage> {
-  final ApiService _apiService = ApiService();
+  final SyncService _syncService = SyncService();
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
@@ -74,7 +75,9 @@ class _DiseasesPageState extends State<DiseasesPage> {
   @override
   void initState() {
     super.initState();
-    _fetchDiseases();
+    _loadDiseasesData();
+    _checkForUpdates();
+    _startPeriodicSync();
   }
 
   @override
@@ -84,19 +87,39 @@ class _DiseasesPageState extends State<DiseasesPage> {
     super.dispose();
   }
 
-  Future<void> _fetchDiseases() async {
+  Future<void> _loadDiseasesData() async {
     try {
-      final diseasesList = await _apiService.fetchAllDiseases();
-      setState(() {
-        _diseases = diseasesList
-            .where((disease) => disease.name.isNotEmpty)
-            .toList();
-        _filteredDiseases = _diseases;
-        _isLoading = false;
-      });
+      final diseasesList = await _syncService.loadCategoryData<Disease>('diseases');
+      if (mounted) {
+        setState(() {
+          _diseases = diseasesList
+              .where((disease) => disease.name.isNotEmpty)
+              .toList();
+          _filteredDiseases = _diseases;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
+      print('Error loading diseases: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Check for updates in the background (no loading screen)
+    final hasUpdates = await _syncService.checkForCategoryUpdates('diseases');
+    if (hasUpdates && mounted) {
+      // Refresh the data silently
+      final updatedData = _syncService.getCachedDiseases().cast<Disease>();
       setState(() {
-        _isLoading = false;
+        _diseases = updatedData.where((disease) => disease.name.isNotEmpty).toList();
+        _filteredDiseases = _diseases.where((disease) =>
+            disease.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+            disease.category.toLowerCase().contains(_searchController.text.toLowerCase())).toList();
       });
     }
   }
@@ -196,10 +219,30 @@ class _DiseasesPageState extends State<DiseasesPage> {
       ),
       body: _isLoading
           ? Center(
-              child: CircularProgressIndicator(
-                color: themeProvider.isDarkMode
-                    ? themeProvider.theme.colorScheme.primary
-                    : Colors.blue,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: themeProvider.isDarkMode
+                        ? themeProvider.theme.colorScheme.primary
+                        : Colors.blue,
+                  ),
+                  SizedBox(height: 16),
+                  StreamBuilder<String>(
+                    stream: _syncService.statusStream,
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data ?? 'Loading diseases...',
+                        style: TextStyle(
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             )
           : _filteredDiseases.isEmpty
@@ -342,5 +385,29 @@ class _DiseasesPageState extends State<DiseasesPage> {
                   ),
                 ),
     );
+  }
+
+  Future<void> _startPeriodicSync() async {
+    // Check for updates every 30 seconds in background
+    Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (mounted) {
+        try {
+          final hasUpdates = await _syncService.checkForCategoryUpdates('diseases');
+          if (hasUpdates && mounted) {
+            // Update data silently without showing loading
+            final updatedData = _syncService.getCachedDiseases().cast<Disease>();
+            setState(() {
+              _diseases = updatedData.where((disease) => disease.name.isNotEmpty).toList();
+              _filteredDiseases = _diseases.where((disease) =>
+                  disease.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
+                  disease.category.toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+            });
+          }
+        } catch (e) {
+          // Silent fail for background sync
+          print('Background sync error: $e');
+        }
+      }
+    });
   }
 }

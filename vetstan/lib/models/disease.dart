@@ -21,14 +21,14 @@ class Disease {
 
   factory Disease.fromJson(Map<String, dynamic> json) {
     return Disease(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       cause: json['cause'] ?? '',
       control: json['control'] ?? '',
       kurdish: json['kurdish'] ?? '',
       symptoms: json['symptoms'] ?? '',
       category: json['category'] ?? '',
-      imageUrl: json['imageUrl'] ?? '',
+      imageUrl: json['imageUrl'] ?? json['image_url'] ?? '',
     );
   }
 

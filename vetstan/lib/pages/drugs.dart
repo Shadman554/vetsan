@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import '../services/sync_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/favorites_provider.dart';
@@ -56,56 +56,6 @@ extension DrugClassExtension on DrugClass {
   }
 }
 
-// Removed duplicate Drug class. Using shared model from lib/models/drug.dart
-/*class Drug {
-  final String id;
-  final String name;
-  final String otherInfo;
-  final String sideEffect;
-  final String usage;
-  final String imageUrl;
-  final String category;
-  final String drugClass;
-
-  Drug({
-    required this.id,
-    required this.name,
-    required this.otherInfo,
-    required this.sideEffect,
-    required this.usage,
-    this.imageUrl = '',
-    this.category = 'General',
-    this.drugClass = '',
-  });
-
-  factory Drug.fromJson(Map<String, dynamic> json) {
-    return Drug(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      otherInfo: json['otherInfo'] ?? '',
-      sideEffect: json['sideEffect'] ?? '',
-      usage: json['usage'] ?? '',
-      imageUrl: json['imageUrl'] ?? '',
-      category: json['category'] ?? 'General',
-      drugClass: json['class'] ?? '',
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'otherInfo': otherInfo,
-      'sideEffect': sideEffect,
-      'usage': usage,
-      'imageUrl': imageUrl,
-      'category': category,
-      'class': drugClass,
-    };
-  }
-}
-*/
-
 class DrugsPage extends StatefulWidget {
   const DrugsPage({Key? key}) : super(key: key);
 
@@ -114,7 +64,7 @@ class DrugsPage extends StatefulWidget {
 }
 
 class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMixin {
-  final ApiService _apiService = ApiService();
+  final SyncService _syncService = SyncService();
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
@@ -131,7 +81,7 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
       'drug',
       'Viewed drug details'
     );
-    
+
     // Navigate to drug details with custom transition
     Navigator.push(
       context,
@@ -257,7 +207,8 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _fetchDrugs();
+    _loadDrugsData();
+    _checkForUpdates();
   }
 
   @override
@@ -267,19 +218,37 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
     super.dispose();
   }
 
-  Future<void> _fetchDrugs() async {
+  Future<void> _loadDrugsData() async {
     try {
-      final drugsList = await _apiService.fetchAllDrugs();
-      setState(() {
-        _drugs = drugsList.where((drug) => drug.name.isNotEmpty).toList();
-        _filteredDrugs = _drugs;
-        _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
-        _isLoading = false;
-      });
+      final drugsList = await _syncService.loadCategoryData<Drug>('drugs');
+      if (mounted) {
+        setState(() {
+          _drugs = drugsList.where((drug) => drug.name.isNotEmpty).toList();
+          _filteredDrugs = _drugs;
+          _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print('Error fetching drugs: $e');
+      print('Error loading drugs: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Check for updates in the background (no loading screen)
+    final hasUpdates = await _syncService.checkForCategoryUpdates('drugs');
+    if (hasUpdates && mounted) {
+      // Refresh the data silently
+      final updatedData = _syncService.getCachedDrugs().cast<Drug>();
       setState(() {
-        _isLoading = false;
+        _drugs = updatedData.where((drug) => drug.name.isNotEmpty).toList();
+        _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
+        _filterDrugs(_searchController.text);
       });
     }
   }
@@ -293,7 +262,6 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
       }).toList();
     });
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -402,10 +370,30 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
       ),
       body: _isLoading
           ? Center(
-              child: CircularProgressIndicator(
-                color: themeProvider.isDarkMode
-                    ? themeProvider.theme.colorScheme.primary
-                    : Colors.blue,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: themeProvider.isDarkMode
+                        ? themeProvider.theme.colorScheme.primary
+                        : Colors.blue,
+                  ),
+                  SizedBox(height: 16),
+                  StreamBuilder<String>(
+                    stream: _syncService.statusStream,
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data ?? 'Loading drugs...',
+                        style: TextStyle(
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             )
           : _filteredDrugs.isEmpty

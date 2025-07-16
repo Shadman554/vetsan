@@ -29,29 +29,60 @@ import 'pages/slides.dart';
 import 'utils/page_transition.dart';
 import 'models/disease.dart';
 import 'models/word.dart';
+import 'package:flutter_phoenix/flutter_phoenix.dart';
+import 'services/sync_service.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Pre-load SharedPreferences instance to avoid multiple async calls later
   await SharedPreferences.getInstance();
-  
+
   // Initialize providers
   final notificationProvider = NotificationProvider();
-  
+
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<NotificationProvider>.value(value: notificationProvider),
-      ],
-      child: const MyApp(),
+    Phoenix(
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<NotificationProvider>.value(value: notificationProvider),
+           ChangeNotifierProvider(create: (_) => LanguageProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => FontSizeProvider()),
+          ChangeNotifierProvider(create: (_) => FavoritesProvider()),
+          ChangeNotifierProvider(create: (_) => HistoryProvider()),
+        ],
+        child: const MyApp(),
+      ),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    _initializeCache();
+  }
+
+  Future<void> _initializeCache() async {
+    try {
+      final SyncService syncService = SyncService();
+      await syncService.initializeApp();
+    } catch (e) {
+      print('Cache initialization error: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +134,7 @@ class MyAppContent extends StatelessWidget {
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
       ],
       localeResolutionCallback: (locale, supportedLocales) {
         // If the locale is Kurdish, use Arabic as the fallback for RTL support
@@ -572,7 +604,7 @@ class _HomePageState extends State<HomePage> {
         final kurdish = (item['kurdish'] ?? '').toLowerCase();
         final arabic = (item['arabic'] ?? '').toLowerCase();
         final searchQuery = query.toLowerCase();
-        
+
         // Apply category filter
         if (_selectedFilter != 'All') {
           final itemType = item['type']?.toLowerCase() ?? '';
@@ -584,7 +616,7 @@ class _HomePageState extends State<HomePage> {
             return false;
           }
         }
-        
+
         return name.contains(searchQuery) || 
                kurdish.contains(searchQuery) || 
                arabic.contains(searchQuery);
@@ -595,10 +627,10 @@ class _HomePageState extends State<HomePage> {
 
   void _showSearchResults() {
     _removeOverlay();
-    
+
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
-    
+
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         width: size.width - 32,
@@ -814,20 +846,20 @@ class _HomePageState extends State<HomePage> {
 
   void _showFilterOptions(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(
-          color: isDarkMode ? Color(0xFF2D2D2D) : Colors.white,
+          color: isDarkMode ? const Color(0xFF2D2D2D) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              margin: EdgeInsets.only(top: 8),
+              margin: const EdgeInsets.only(top: 8),
               width: 40,
               height: 4,
               decoration: BoxDecoration(
@@ -836,7 +868,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -848,7 +880,7 @@ class _HomePageState extends State<HomePage> {
                       color: isDarkMode ? Colors.white : Colors.black87,
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   InkWell(
                     onTap: () {
                       setState(() => _selectedFilter = 'All');
@@ -909,8 +941,8 @@ class _HomePageState extends State<HomePage> {
   Widget _buildFilterOption(String text, IconData icon, Color color) {
     final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 8),
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: isDarkMode ? Colors.black12 : Colors.grey.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
@@ -918,7 +950,7 @@ class _HomePageState extends State<HomePage> {
       child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(8),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
@@ -929,7 +961,7 @@ class _HomePageState extends State<HomePage> {
               size: 20,
             ),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Text(
             text,
             style: TextStyle(
@@ -937,7 +969,7 @@ class _HomePageState extends State<HomePage> {
               color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          Spacer(),
+          const Spacer(),
           if (_selectedFilter == text)
             Icon(
               Icons.check_circle,
