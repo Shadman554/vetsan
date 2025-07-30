@@ -31,20 +31,22 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   List<Map<String, dynamic>> _filteredBooks = [];
-  String _selectedCategory = 'All';
+  String _selectedCategory = 'هەموو کتێبەکان';
 
-  String _getDatabaseCategory(String translatedCategory) {
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
-    if (translatedCategory == languageProvider.translate('all books')) {
-      return 'All';
-    } else if (translatedCategory == languageProvider.translate('kurdish books')) {
-      return 'کتێبە کوردیەکان';
-    } else if (translatedCategory == languageProvider.translate('english books')) {
-      return 'کتێبە ئینگلیزیەکان';
-    } else if (translatedCategory == languageProvider.translate('arabic books')) {
-      return 'کتێبە عەرەبیەکان';
+  String _getDatabaseCategory(String displayCategory) {
+    // Map Kurdish UI text to English database categories
+    switch (displayCategory) {
+      case 'هەموو کتێبەکان':
+        return 'All';
+      case 'کتێبە کوردیەکان':
+        return 'Kurdish';
+      case 'کتێبە عەرەبیەکان':
+        return 'Arabic';
+      case 'کتێبە ئینگلیزیەکان':
+        return 'English';
+      default:
+        return displayCategory;
     }
-    return translatedCategory;
   }
 
   @override
@@ -217,22 +219,28 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
                     ),
                   ),
                   Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _filterBooks,
-                      decoration: InputDecoration(
-                        hintText: 'Search books...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(
-                          color: isDarkMode
-                              ? Colors.white.withOpacity(0.6)
-                              : Colors.grey,
+                    child: Directionality(
+                      textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: _filterBooks,
+                        textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                        decoration: InputDecoration(
+                          hintText: 'گەڕان بۆ کتێب...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(
+                            color: isDarkMode
+                                ? Colors.white.withOpacity(0.6)
+                                : Colors.grey,
+                            fontFamily: 'Inter',
+                          ),
                         ),
-                      ),
-                      style: TextStyle(
-                        color: isDarkMode
-                            ? Colors.white
-                            : Colors.black,
+                        style: TextStyle(
+                          color: isDarkMode
+                              ? Colors.white
+                              : Colors.black,
+                          fontFamily: 'Inter',
+                        ),
                       ),
                     ),
                   ),
@@ -257,10 +265,10 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
             physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
-                _buildCategoryChip(Provider.of<LanguageProvider>(context).translate('all books')),
-                _buildCategoryChip(Provider.of<LanguageProvider>(context).translate('kurdish books')),
-                _buildCategoryChip(Provider.of<LanguageProvider>(context).translate('english books')),
-                _buildCategoryChip(Provider.of<LanguageProvider>(context).translate('arabic books')),
+                _buildCategoryChip('هەموو کتێبەکان'),
+                _buildCategoryChip('کتێبە کوردیەکان'),
+                _buildCategoryChip('کتێبە عەرەبیەکان'),
+                _buildCategoryChip('کتێبە ئینگلیزیەکان'),
               ],
             ),
           ),
@@ -271,11 +279,21 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
 
   Widget _buildCategoryChip(String category) {
     final isSelected = _selectedCategory == category;
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
         selected: isSelected,
-        label: Text(category),
+        label: Directionality(
+          textDirection: languageProvider.textDirection,
+          child: Text(
+            category,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+            ),
+          ),
+        ),
         onSelected: (selected) {
           setState(() {
             _selectedCategory = category;
@@ -350,23 +368,37 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    book['title'],
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
+                  Directionality(
+                    textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                    child: Text(
+                      book['title'],
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Inter',
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: Provider.of<LanguageProvider>(context).isRTL 
+                          ? TextAlign.right 
+                          : TextAlign.left,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    book['author'],
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                  Directionality(
+                    textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                    child: Text(
+                      book['author'],
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                        fontFamily: 'Inter',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: Provider.of<LanguageProvider>(context).isRTL 
+                          ? TextAlign.right 
+                          : TextAlign.left,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -379,16 +411,40 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Books'),
+        title: Directionality(
+          textDirection: languageProvider.textDirection,
+          child: const Text(
+            'کتێبەکان',
+            style: TextStyle(fontFamily: 'Inter'),
+          ),
+        ),
         centerTitle: true,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'All Books'),
-            Tab(text: 'Recent'),
+          tabs: [
+            Tab(
+              child: Directionality(
+                textDirection: languageProvider.textDirection,
+                child: const Text(
+                  'هەموو کتێبەکان',
+                  style: TextStyle(fontFamily: 'Inter'),
+                ),
+              ),
+            ),
+            Tab(
+              child: Directionality(
+                textDirection: languageProvider.textDirection,
+                child: const Text(
+                  'خوێندراوەکان',
+                  style: TextStyle(fontFamily: 'Inter'),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -406,14 +462,28 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
                     children: [
                       const Icon(Icons.error_outline, color: Colors.red, size: 60),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Oops! Something went wrong',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      Directionality(
+                        textDirection: languageProvider.textDirection,
+                        child: const Text(
+                          'ببورە کێشەیەک ڕوویدا!',
+                          style: TextStyle(
+                            fontSize: 18, 
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Inter',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: _loadBooks,
-                        child: const Text('Retry'),
+                        child: Directionality(
+                          textDirection: languageProvider.textDirection,
+                          child: const Text(
+                            'دووبارەی بکەوە',
+                            style: TextStyle(fontFamily: 'Inter'),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -426,8 +496,15 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
                         _buildSearchBar(),
                         Expanded(
                           child: _filteredBooks.isEmpty && _searchController.text.isNotEmpty
-                              ? const Center(
-                                  child: Text('No books found'),
+                              ? Center(
+                                  child: Directionality(
+                                    textDirection: languageProvider.textDirection,
+                                    child: const Text(
+                                      'هیچ کتێبێک نەدۆزرایەوە',
+                                      style: TextStyle(fontFamily: 'Inter'),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                 )
                               : _buildBookGrid(_filteredBooks.isEmpty
                                   ? _books
@@ -436,8 +513,15 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
                       ],
                     ),
                     _recentBooks.isEmpty
-                        ? const Center(
-                            child: Text('No recent books'),
+                        ? Center(
+                            child: Directionality(
+                              textDirection: languageProvider.textDirection,
+                              child: const Text(
+                                'هیچ کتێبێکت نەخوێندوەتەوە',
+                                style: TextStyle(fontFamily: 'Inter'),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                           )
                         : _buildBookGrid(_recentBooks),
                   ],
@@ -495,7 +579,7 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
       }
     } catch (e) {
       // Handle cache loading error
-      print('Error loading cached books: $e');
+      // print('Error loading cached books: $e');
     }
   }
 
@@ -506,7 +590,7 @@ class _BooksPageState extends State<BooksPage> with SingleTickerProviderStateMix
           'books', books.map((book) => jsonEncode(book)).toList());
     } catch (e) {
       // Handle cache saving error
-      print('Error caching books: $e');
+      // print('Error caching books: $e');
     }
   }
 
@@ -647,7 +731,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
           }
         } catch (e) {
           // If cached file is corrupted or causes error, delete it and re-download
-          print('Error reading cached PDF: $e. Deleting and re-downloading.');
+          // print('Error reading cached PDF: $e. Deleting and re-downloading.');
           if (!_isDisposed) {
             await cachedPdfFile.delete();
           }
@@ -655,7 +739,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
       }
 
       // If not cached or cache is invalid, download from network
-      _showSnackBar('Downloading PDF...');
+      _showSnackBar('کتێبەکە دادەبەزێت...');
       final dio = Dio();
       final response = await dio.get(
         widget.url,
@@ -697,7 +781,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
       }
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
-        print('PDF download cancelled.');
+        // print('PDF download cancelled.');
       } else {
         if (!_isDisposed && mounted) {
           _safeSetState(() {
@@ -725,15 +809,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
   }
 
   void _showSnackBar(String message) {
-    if (!_isDisposed && mounted && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    // SnackBar disabled as per request
   }
 
   void _handleSearch(String searchText) {
@@ -872,7 +948,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Loading PDF... ${_loadingProgress.toStringAsFixed(1)}%',
+                          'کتێبەکە دەکرێتەوە... ${_loadingProgress.toStringAsFixed(1)}%',
                           style: TextStyle(
                             color: onSurfaceColor,
                             fontSize: 16,
@@ -978,7 +1054,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Failed to load PDF. Please try again.',
+                        'کردنەوەی کتێب سەرکەوتوو نەبوو! تکایە هەوڵ بدەرەوە',
                         style: TextStyle(
                           color: theme.colorScheme.error,
                           fontSize: 16,
@@ -987,7 +1063,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
                       const SizedBox(height: 8),
                       ElevatedButton(
                         onPressed: _loadPdf,
-                        child: const Text('Retry'),
+                        child: const Text('دووبارە'),
                       ),
                     ],
                   ),
@@ -1025,7 +1101,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
                                     controller: _searchController,
                                     style: TextStyle(color: onSurfaceColor),
                                     decoration: InputDecoration(
-                                      hintText: 'Search in PDF...',
+                                      hintText: 'گەڕان بۆ کتێب...',
                                       hintStyle: TextStyle(color: onSurfaceColorMuted),
                                       filled: true,
                                       fillColor: isDark ? const Color(0xFF3D3D3D) : Theme.of(context).cardColor,
@@ -1178,7 +1254,7 @@ class _PDFViewerPageState extends State<PDFViewerPage> {
                                       )
                                     : Center(
                                         child: Text(
-                                          'Loading pages...',
+                                          'پەڕەکە دەکرێتەوە...',
                                           style: TextStyle(
                                             color: onSurfaceColor,
                                           ),

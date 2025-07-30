@@ -32,7 +32,7 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
 
   Widget _buildFavoritesList(List<dynamic> items, String type) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
 
     if (items.isEmpty) {
       return Center(
@@ -46,7 +46,7 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
             ),
             const SizedBox(height: 16),
             Text(
-              languageProvider.translate('No favorite ${type.toLowerCase()}s'),
+              'هیچ ${type.toLowerCase() == 'drug' ? 'دەرمانی' : type.toLowerCase() == 'disease' ? 'نەخۆشیی' : 'زاراوەی'} دڵخواز نییە',
               style: TextStyle(
                 color: themeProvider.isDarkMode ? themeProvider.theme.colorScheme.onSurface.withOpacity(0.6) : themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
                 fontSize: 18,
@@ -174,7 +174,7 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final favoritesProvider = Provider.of<FavoritesProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
 
     final drugFavorites = favoritesProvider.getDrugFavorites();
     final diseaseFavorites = favoritesProvider.getDiseaseFavorites();
@@ -186,7 +186,7 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
         elevation: 0,
         backgroundColor: themeProvider.theme.appBarTheme.backgroundColor,
         title: Text(
-          languageProvider.translate('Favorites'),
+          'دڵخوازەکان',
           style: themeProvider.theme.appBarTheme.titleTextStyle?.copyWith(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -202,11 +202,48 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
           labelStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            fontFamily: 'Inter',
           ),
           tabs: [
-            Tab(text: languageProvider.translate('Drugs')),
-            Tab(text: languageProvider.translate('Diseases')),
-            Tab(text: languageProvider.translate('Terminology')),
+            Tab(
+              child: Directionality(
+                textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                child: Text(
+                  'دەرمانەکان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ),
+            Tab(
+              child: Directionality(
+                textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                child: Text(
+                  'نەخۆشییەکان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ),
+            Tab(
+              child: Directionality(
+                textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                child: Text(
+                  'زاراوەکان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

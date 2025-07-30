@@ -5,7 +5,7 @@
   "notifications": "ئاگادارکردنەوەکان",
   "language": "زمان",
   "select_language": "زمان هەڵبژێرە",
-  "english": "ئینگلیزی",
+
   "kurdish": "کوردی",
   "save": "پاشەکەوت",
   "cancel": "پاشگەزبوونەوە",
@@ -56,7 +56,7 @@
   "Search diseases...": "گەڕان بۆ نەخۆشیەکان...",
   "all books": "هەموو",
   "kurdish books": "کتێبە کوردیەکان",
-  "english books": "کتێبە ئینگلیزیەکان",
+
   "arabic books": "کتێبە عەرەبیەکان",
   "App Version": "وەشانی ئەپ "
 }

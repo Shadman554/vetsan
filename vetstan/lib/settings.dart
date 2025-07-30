@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/font_size_provider.dart';
-import 'services/sync_service.dart'; // Import the SyncService
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -19,95 +18,101 @@ class _SettingsPageState extends State<SettingsPage> {
     final languageProvider = Provider.of<LanguageProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
 
-    return Scaffold(
-      backgroundColor: themeProvider.theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(
-          languageProvider.translate('settings'),
-          style: TextStyle(
-            color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B),
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Inter',
+    return Directionality(
+      textDirection: languageProvider.textDirection,
+      child: Scaffold(
+        backgroundColor: themeProvider.theme.scaffoldBackgroundColor,
+        appBar: AppBar(
+          title: Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Text(
+              'ڕێکخستنەکان',
+              style: TextStyle(
+                color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B),
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Inter',
+              ),
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+            ),
+          ),
+          backgroundColor: themeProvider.isDarkMode ? const Color(0xFF2D2D2D) : Colors.white,
+          centerTitle: true,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, 
+              color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B)
+            ),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-        backgroundColor: themeProvider.isDarkMode ? const Color(0xFF2D2D2D) : Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, 
-            color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B)
-          ),
-          onPressed: () => Navigator.pop(context),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildSettingsSection(
+              title: 'ڕووکار',
+              children: [
+                _buildThemeToggle(),
+                _buildFontSizeSlider(),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+            _buildSettingsSection(
+              title:'دەربارە',
+              children: [
+                _buildAboutTile(),
+              ],
+            ),
+
+        ],
         ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildSettingsSection(
-            title: languageProvider.translate('display'),
-            children: [
-              _buildThemeToggle(),
-              _buildFontSizeSlider(),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSettingsSection(
-            title: languageProvider.translate('language'),
-            children: [
-              _buildLanguageSelector(context),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSettingsSection(
-            title:languageProvider.translate('About'),
-            children: [
-              _buildAboutTile(),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _buildSettingsSection(
-            title: languageProvider.translate('Sync'),
-            children: [
-              _buildSyncOptions(),
-            ],
-          ),
-      ],
       ),
     );
   }
 
   Widget _buildSettingsSection({required String title, required List<Widget> children}) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
         color: themeProvider.isDarkMode ? const Color(0xFF2D2D2D) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
             child: Text(
               title,
               style: TextStyle(
                 color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B),
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
                 fontFamily: 'Inter',
+                letterSpacing: 0.2,
               ),
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+              textDirection: languageProvider.textDirection,
             ),
           ),
           Divider(
             height: 1,
-            color: themeProvider.isDarkMode ? Colors.grey[700] : Colors.grey[200],
+            thickness: 0.5,
+            color: themeProvider.isDarkMode ? Colors.grey[600] : Colors.grey[300],
+            indent: 20,
+            endIndent: 20,
           ),
           ...children,
         ],
@@ -120,25 +125,31 @@ class _SettingsPageState extends State<SettingsPage> {
     final languageProvider = Provider.of<LanguageProvider>(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            languageProvider.translate('Dark Mode'),
-            style: TextStyle(
-              color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF475569),
-              fontSize: 16,
-              fontFamily: 'Inter',
+      child: Directionality(
+        textDirection: languageProvider.textDirection,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'دۆخی تاریک',
+                style: TextStyle(
+                  color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF475569),
+                  fontSize: 16,
+                  fontFamily: 'Inter',
+                ),
+                textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+              ),
             ),
-          ),
-          Switch(
-            value: themeProvider.isDarkMode,
-            onChanged: (value) {
-              themeProvider.toggleTheme();
-            },
-            activeColor: const Color(0xFF2563EB),
-          ),
-        ],
+            Switch(
+              value: themeProvider.isDarkMode,
+              onChanged: (value) {
+                themeProvider.toggleTheme();
+              },
+              activeColor: const Color(0xFF2563EB),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -151,28 +162,34 @@ class _SettingsPageState extends State<SettingsPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: languageProvider.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                languageProvider.translate('Font Size'),
-                style: TextStyle(
-                  color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B),
-                  fontSize: 16,
-                  fontFamily: 'Inter',
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'قەبارەی فۆنت',
+                    style: TextStyle(
+                      color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF1E293B),
+                      fontSize: 16,
+                      fontFamily: 'Inter',
+                    ),
+                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                  ),
                 ),
-              ),
-              Text(
-                '${(fontSizeProvider.fontSize * 100).round()}%',
-                style: TextStyle(
-                  color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey[600],
-                  fontSize: 14,
-                  fontFamily: 'Inter',
+                Text(
+                  '${(fontSizeProvider.fontSize * 100).round()}%',
+                  style: TextStyle(
+                    color: themeProvider.isDarkMode ? Colors.white70 : Colors.grey[600],
+                    fontSize: 14,
+                    fontFamily: 'Inter',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           Slider(
             value: fontSizeProvider.fontSize,
@@ -190,215 +207,34 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildLanguageSelector(BuildContext context) {
-    final languageProvider = Provider.of<LanguageProvider>(context);
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    return Column(
-      children: [
-        _buildLanguageOption(
-          'English',
-          languageProvider.currentLocale.languageCode == 'en',
-          () => languageProvider.setLanguage('en'),
-        ),
-        Divider(
-          height: 1,
-          color: themeProvider.isDarkMode ? Colors.grey[700] : Colors.grey[200],
-        ),
-        _buildLanguageOption(
-          'Kurdish',
-          languageProvider.currentLocale.languageCode == 'ku',
-          () => languageProvider.setLanguage('ku'),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildLanguageOption(String language, bool isSelected, VoidCallback onTap) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              language,
-              style: TextStyle(
-                color: isSelected 
-                  ? const Color(0xFF2563EB)
-                  : (themeProvider.isDarkMode ? Colors.white : const Color(0xFF475569)),
-                fontSize: 16,
-                fontFamily: 'Inter',
-              ),
-            ),
-            if (isSelected)
-              const Icon(
-                Icons.check,
-                color: Color(0xFF2563EB),
-                size: 20,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildAboutTile() {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      title: Text(
-        languageProvider.translate('App Version'),
-        style: TextStyle(
-          color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF475569),
-          fontSize: 16,
-          fontFamily: 'Inter',
+    return Directionality(
+      textDirection: languageProvider.textDirection,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        title: Text(
+          'وەشانی ئەپ',
+          style: TextStyle(
+            color: themeProvider.isDarkMode ? Colors.white : const Color(0xFF475569),
+            fontSize: 16,
+            fontFamily: 'Inter',
+          ),
+          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+        ),
+        trailing: Text(
+          '1.0.0',
+          style: TextStyle(
+            color: themeProvider.isDarkMode ? Colors.grey[400] : const Color(0xFF64748B),
+            fontSize: 16,
+            fontFamily: 'Inter',
+          ),
         ),
       ),
-      trailing: Text(
-        '1.0.0',
-        style: TextStyle(
-          color: themeProvider.isDarkMode ? Colors.grey[400] : const Color(0xFF64748B),
-          fontSize: 16,
-          fontFamily: 'Inter',
-        ),
-      ),
     );
   }
 
-  Widget _buildSyncOptions() {
-    Provider.of<ThemeProvider>(context);
-    final fontSizeProvider = Provider.of<FontSizeProvider>(context);
-    double fontSize = fontSizeProvider.fontSize * 16;
-
-    return Column(
-      children: [
-        ListTile(
-          leading: const Icon(Icons.sync),
-          title: Text(
-            'Check for Updates',
-            style: TextStyle(fontSize: fontSize),
-          ),
-          subtitle: Text(
-            'Check for new data and sync only updates',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
-          onTap: () => _checkForUpdates(context),
-        ),
-        ListTile(
-          leading: const Icon(Icons.refresh),
-          title: Text(
-            'Force Sync All Data',
-            style: TextStyle(fontSize: fontSize),
-          ),
-          subtitle: Text(
-            'Download all data from server (This will replace local data)',
-            style: TextStyle(fontSize: fontSize - 2),
-          ),
-          onTap: () => _showSyncDialog(context),
-        ),
-      ],
-    );
-  }
-
-  void _checkForUpdates(BuildContext context) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    try {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Checking for updates...')),
-      );
-
-      final syncService = SyncService();
-      
-      // Force check all categories for updates
-      final categories = ['dictionary', 'diseases', 'drugs', 'books'];
-      bool hasAnyUpdates = false;
-      
-      for (String category in categories) {
-        try {
-          final hasUpdates = await syncService.checkForCategoryUpdates(category);
-          if (hasUpdates) {
-            hasAnyUpdates = true;
-          }
-        } catch (e) {
-          print('Error checking $category: $e');
-        }
-      }
-
-      if (hasAnyUpdates) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Updates found and synchronized!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('No new updates available')),
-        );
-      }
-    } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Error checking for updates: $e')),
-      );
-    }
-  }
-
-  void _showSyncDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Force Sync All Data'),
-          content: const Text(
-              'This will download all data from the server and replace your local data. This process may take a few minutes. Continue?'),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Sync'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _performSync(context);
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _performSync(BuildContext context) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    try {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Starting full sync...')),
-      );
-
-      final syncService = SyncService();
-      await syncService.forceFullSync();
-
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(
-          content: Text('Full sync completed successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('Error during full sync: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 }

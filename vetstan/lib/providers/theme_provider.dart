@@ -3,12 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider extends ChangeNotifier {
   static const String _themeKey = 'is_dark_mode';
-  static const String _languageKey = 'is_english';
   bool _isDarkMode = false;
-  bool _isEnglish = true;
 
   bool get isDarkMode => _isDarkMode;
-  bool get isEnglish => _isEnglish;
 
   ThemeProvider() {
     _loadPreferences();
@@ -17,7 +14,6 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     _isDarkMode = prefs.getBool(_themeKey) ?? false;
-    _isEnglish = prefs.getBool(_languageKey) ?? true;
     notifyListeners();
   }
 
@@ -28,12 +24,7 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleLanguage() async {
-    _isEnglish = !_isEnglish;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_languageKey, _isEnglish);
-    notifyListeners();
-  }
+
 
   ThemeData get theme => _isDarkMode ? _darkTheme : _lightTheme;
 

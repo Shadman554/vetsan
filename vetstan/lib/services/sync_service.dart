@@ -148,7 +148,7 @@ class SyncService {
     try {
       _statusController.add('Checking for updates...');
       
-      final categories = ['dictionary', 'diseases', 'drugs', 'books'];
+      final categories = ['dictionary', 'diseases', 'drugs', 'books', 'notes'];
       
       for (String category in categories) {
         if (_cacheService.isDataLoaded(category)) {
@@ -214,6 +214,8 @@ class SyncService {
         return (await _apiService.fetchAllDrugs()).cast<T>();
       case 'books':
         return (await _apiService.fetchAllBooks()).cast<T>();
+      case 'notes':
+        return (await _apiService.fetchAllNotes()).cast<T>();
       default:
         throw Exception('Unknown data type: $dataType');
     }
@@ -230,6 +232,9 @@ class SyncService {
         return await _apiService.fetchDrugUpdates(since: since);
       case 'books':
         return await _apiService.fetchBookUpdates(since: since);
+      case 'notes':
+        // Currently API doesn’t expose incremental updates for notes. Return empty list.
+        return [];
       default:
         throw Exception('Unknown data type: $dataType');
     }
@@ -246,6 +251,8 @@ class SyncService {
         return _cacheService.getCachedDrugs().cast<T>();
       case 'books':
         return _cacheService.getCachedBooks().cast<T>();
+      case 'notes':
+        return _cacheService.getCachedNotes().cast<T>();
       default:
         throw Exception('Unknown data type: $dataType');
     }
@@ -266,6 +273,9 @@ class SyncService {
       case 'books':
         await _cacheService.cacheBooks(data.cast());
         break;
+      case 'notes':
+        await _cacheService.cacheNotes(data.cast());
+        break;
     }
   }
 
@@ -283,6 +293,9 @@ class SyncService {
         break;
       case 'books':
         await _cacheService.mergeBookUpdates(updates.cast());
+        break;
+      case 'notes':
+        await _cacheService.mergeNoteUpdates(updates.cast());
         break;
     }
   }

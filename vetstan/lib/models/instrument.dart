@@ -1,46 +1,47 @@
 class Instrument {
-  final int? id;
-  final int? categoryId;
-  final String nameEn;
-  final String nameKu;
-  final String imagePath;
-  final String descriptionEn;
-  final String descriptionKu;
+  final String id;
+  final String name;
+  final String description;
+  final String imageUrl;
+  final String createdAt;
 
   Instrument({
-    this.id,
-    this.categoryId,
-    required this.nameEn,
-    required this.nameKu,
-    required this.imagePath,
-    required this.descriptionEn,
-    required this.descriptionKu,
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.imageUrl,
+    required this.createdAt,
   });
 
-  String getName(bool isEnglish) => isEnglish ? nameEn : nameKu;
-  String getDescription(bool isEnglish) => isEnglish ? descriptionEn : descriptionKu;
+  String getName(bool isEnglish) => name;
+  String getDescription(bool isEnglish) => description;
 
-  factory Instrument.fromMap(Map<String, dynamic> map) {
+  factory Instrument.fromJson(Map<String, dynamic> json) {
     return Instrument(
-      id: map['id'] as int?,
-      categoryId: map['category_id'] as int?,
-      nameEn: map['name_en'] as String,
-      nameKu: map['name_ku'] as String,
-      imagePath: map['image_path'] as String,
-      descriptionEn: map['description_en'] as String,
-      descriptionKu: map['description_ku'] as String,
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      imageUrl: json['image_url'] ?? '',
+      createdAt: json['created_at'] ?? '',
     );
   }
 
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'category_id': categoryId,
-      'name_en': nameEn,
-      'name_ku': nameKu,
-      'image_path': imagePath,
-      'description_en': descriptionEn,
-      'description_ku': descriptionKu,
+      'name': name,
+      'description': description,
+      'image_url': imageUrl,
+      'created_at': createdAt,
     };
+  }
+
+  // Legacy compatibility methods
+  factory Instrument.fromMap(Map<String, dynamic> map) {
+    return Instrument.fromJson(map);
+  }
+
+  Map<String, dynamic> toMap() {
+    return toJson();
   }
 }

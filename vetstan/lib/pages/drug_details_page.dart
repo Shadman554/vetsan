@@ -69,7 +69,7 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final favoritesProvider = Provider.of<FavoritesProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
     final isFavorite = favoritesProvider.isFavorite(widget.drug);
 
     return Scaffold(
@@ -173,7 +173,7 @@ ${widget.drug.otherInfo}''';
                               SnackBar(content: Text('Copied to clipboard')),
                             );
                           },
-                          label: languageProvider.translate('copy'),
+                          label: 'کۆپی',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -186,8 +186,8 @@ ${widget.drug.otherInfo}''';
                             }
                           },
                           label: isFavorite 
-                            ? languageProvider.translate('saved')
-                            : languageProvider.translate('save'),
+                            ? 'پاشەکەوتکراوە'
+                            : 'پاشەکەوتکردن',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -199,7 +199,7 @@ ${widget.drug.sideEffect}
 ${widget.drug.otherInfo}''';
                             Share.share(content);
                           },
-                          label: languageProvider.translate('share'),
+                          label: 'هاوبەشکردن',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -212,8 +212,8 @@ ${widget.drug.otherInfo}''';
                             _speak(content.trim());
                           },
                           label: isPlaying 
-                            ? languageProvider.translate('audio')
-                            : languageProvider.translate('audio'),
+                            ? 'وەستان'
+                            : 'دەنگ',
                           themeProvider: themeProvider,
                         ),
                       ],
@@ -230,7 +230,7 @@ ${widget.drug.otherInfo}''';
               child: Column(
                 children: [
                   _buildInfoSection(
-                    languageProvider.translate('Usage'),
+                    'بەکارهێنان',
                     widget.drug.usage,
                     Icons.medical_services,
                     themeProvider.isDarkMode 
@@ -240,7 +240,7 @@ ${widget.drug.otherInfo}''';
                   ),
                   SizedBox(height: 16),
                   _buildInfoSection(
-                    languageProvider.translate('Side Effects'),
+                    'کاریگەری لاوەکی',
                     widget.drug.sideEffect,
                     Icons.warning_amber,
                     themeProvider.isDarkMode 
@@ -250,7 +250,7 @@ ${widget.drug.otherInfo}''';
                   ),
                   SizedBox(height: 16),
                   _buildInfoSection(
-                    languageProvider.translate('Additional Info'),
+                    'زانیاری زیاتر',
                     widget.drug.otherInfo,
                     Icons.info,
                     themeProvider.isDarkMode 
@@ -312,6 +312,8 @@ ${widget.drug.otherInfo}''';
     Color color,
     ThemeProvider themeProvider,
   ) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -333,38 +335,48 @@ ${widget.drug.otherInfo}''';
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
                 ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              SizedBox(width: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: themeProvider.isDarkMode 
-                    ? Colors.white 
-                    : color,
+                SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: themeProvider.isDarkMode 
+                        ? Colors.white 
+                        : color,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           SizedBox(height: 16),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 16,
-              color: themeProvider.isDarkMode 
-                ? Colors.grey[400] 
-                : Colors.black87,
-              height: 1.6,
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Text(
+              content,
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+              style: TextStyle(
+                fontSize: 16,
+                color: themeProvider.isDarkMode 
+                  ? Colors.grey[400] 
+                  : Colors.black87,
+                height: 1.6,
+              ),
             ),
           ),
         ],

@@ -6,6 +6,9 @@ import '../models/disease.dart';
 import '../models/drug.dart';
 import '../models/book.dart';
 import '../models/normal_range.dart';
+import '../models/note.dart';
+import '../models/instrument.dart';
+import '../models/slide.dart';
 
 class ApiService {
   ApiService();
@@ -103,6 +106,77 @@ class ApiService {
     final decoded = json.decode(response.body);
     final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
     return jsonData.map((e) => NormalRange.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Note>> fetchAllNotes() async {
+    final uri = Uri.parse('$_baseUrl/api/notes/');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load notes – status \${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Note.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Instrument>> fetchAllInstruments() async {
+    final uri = Uri.parse('$_baseUrl/api/instruments/');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load instruments – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Instrument.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Slide>> fetchUrineSlides() async {
+    final uri = Uri.parse('$_baseUrl/api/urine-slides/');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load urine slides – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Slide.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Slide>> fetchStoolSlides() async {
+    final uri = Uri.parse('$_baseUrl/api/stool-slides/');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load stool slides – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Slide.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Slide>> fetchOtherSlides() async {
+    final uri = Uri.parse('$_baseUrl/api/other-slides/');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load other slides – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    final List<dynamic> jsonData = decoded is List ? decoded : (decoded['items'] as List<dynamic>);
+    return jsonData.map((e) => Slide.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<Slide> fetchSlideByName(String category, String slideName) async {
+    final uri = Uri.parse('$_baseUrl/api/${category.toLowerCase()}-slides/$slideName');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load slide – status ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body);
+    return Slide.fromJson(decoded as Map<String, dynamic>);
   }
 
   // Incremental sync methods

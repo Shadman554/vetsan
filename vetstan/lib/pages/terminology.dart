@@ -71,6 +71,7 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
   List<Word> _terminology = [];
   List<Word> _filteredTerminology = [];
   bool _isLoading = true;
+  String _statusMessage = 'Loading terminology...';
 
   @override
   void initState() {
@@ -89,12 +90,17 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
 
   Future<void> _loadTerminologyData() async {
     try {
+      setState(() {
+        _statusMessage = 'Loading terminology...';
+      });
+      
       final terminologyList = await _syncService.loadCategoryData<Word>('dictionary');
       if (mounted) {
         setState(() {
           _terminology = terminologyList;
           _filteredTerminology = _terminology;
           _isLoading = false;
+          _statusMessage = 'Terminology loaded successfully';
         });
       }
     } catch (e) {
@@ -102,6 +108,7 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _statusMessage = 'Error loading terminology';
         });
       }
     }
@@ -111,6 +118,10 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
     // Check for updates in the background (no loading screen)
     final hasUpdates = await _syncService.checkForCategoryUpdates('dictionary');
     if (hasUpdates && mounted) {
+      setState(() {
+        _statusMessage = 'Updating terminology...';
+      });
+      
       // Refresh the data silently
       final updatedData = await _syncService.loadCategoryData<Word>('dictionary');
       setState(() {
@@ -120,6 +131,7 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
             terminology.kurdish.toLowerCase().contains(_searchController.text.toLowerCase()) ||
             terminology.arabic.toLowerCase().contains(_searchController.text.toLowerCase()) ||
             terminology.description.toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+        _statusMessage = 'Terminology updated successfully';
       });
     }
   }
@@ -163,7 +175,7 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          languageProvider.translate('terminology'),
+          'زاراوەکان',
           style: TextStyle(
             color: themeProvider.isDarkMode
                 ? themeProvider.theme.colorScheme.onSurface
@@ -192,27 +204,37 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
                       ),
                     ],
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterTerminology,
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-              decoration: InputDecoration(
-                hintText: languageProvider.translate('Search terminology...'),
-                hintStyle: TextStyle(
-                  color: themeProvider.isDarkMode
-                      ? Colors.grey[600]
-                      : Colors.grey[400],
+            child: Directionality(
+              textDirection: languageProvider.textDirection,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _filterTerminology,
+                textDirection: languageProvider.textDirection,
+                style: TextStyle(
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
                 ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: themeProvider.isDarkMode
-                      ? Colors.grey[600]
-                      : Colors.grey[400],
+                decoration: InputDecoration(
+                  hintText: 'گەڕان بە زاراوەکان...',
+                  hintStyle: TextStyle(
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ),
+                  prefixIcon: languageProvider.isRTL ? null : Icon(
+                    Icons.search,
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ),
+                  suffixIcon: languageProvider.isRTL ? Icon(
+                    Icons.search,
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ) : null,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
@@ -229,19 +251,14 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
                         : Colors.blue,
                   ),
                   SizedBox(height: 16),
-                  StreamBuilder<String>(
-                    stream: _syncService.statusStream,
-                    builder: (context, snapshot) {
-                      return Text(
-                        snapshot.data ?? 'Loading terminology...',
-                        style: TextStyle(
-                          color: themeProvider.isDarkMode
-                              ? Colors.grey[400]
-                              : Colors.grey[600],
-                          fontSize: 16,
-                        ),
-                      );
-                    },
+                  Text(
+                    _statusMessage,
+                    style: TextStyle(
+                      color: themeProvider.isDarkMode
+                          ? Colors.grey[400]
+                          : Colors.grey[600],
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -260,7 +277,7 @@ class _TerminologyPageState extends State<TerminologyPage> with SingleTickerProv
                       ),
                       SizedBox(height: 16),
                       Text(
-                        languageProvider.translate('no_terminology_found'),
+                        'هیچ زاراوەیەک نەدۆزرایەوە',
                         style: TextStyle(
                           color: themeProvider.isDarkMode
                               ? Colors.grey[500]

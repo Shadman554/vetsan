@@ -290,7 +290,7 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          languageProvider.translate('drugs'),
+          'دەرمانەکان',
           style: TextStyle(
             color: themeProvider.isDarkMode
                 ? themeProvider.theme.colorScheme.onSurface
@@ -322,27 +322,37 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _filterDrugs,
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: languageProvider.translate('Search Drugs...'),
-                      hintStyle: TextStyle(
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[600]
-                            : Colors.grey[400],
+                  child: Directionality(
+                    textDirection: languageProvider.textDirection,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _filterDrugs,
+                      textDirection: languageProvider.textDirection,
+                      style: TextStyle(
+                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
                       ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[600]
-                            : Colors.grey[400],
+                      decoration: InputDecoration(
+                        hintText: 'گەڕان لە دەرمانەکان...',
+                        hintStyle: TextStyle(
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[600]
+                              : Colors.grey[400],
+                        ),
+                        prefixIcon: languageProvider.isRTL ? null : Icon(
+                          Icons.search,
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[600]
+                              : Colors.grey[400],
+                        ),
+                        suffixIcon: languageProvider.isRTL ? Icon(
+                          Icons.search,
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[600]
+                              : Colors.grey[400],
+                        ) : null,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     ),
                   ),
                 ),
@@ -410,7 +420,7 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
                       ),
                       SizedBox(height: 16),
                       Text(
-                        languageProvider.translate('no_drugs_found'),
+                        'هیچ دەرمانێک نەدۆزرایەوە',
                         style: TextStyle(
                           color: themeProvider.isDarkMode
                               ? Colors.grey[500]

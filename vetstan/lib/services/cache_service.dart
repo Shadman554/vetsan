@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/word.dart';
 import '../models/disease.dart';
 import '../models/drug.dart';
+import '../models/note.dart';
 import '../models/book.dart';
 
 class CacheService {
@@ -13,12 +14,14 @@ class CacheService {
   static const String _diseasesBox = 'diseases';
   static const String _drugsBox = 'drugs';
   static const String _booksBox = 'books';
+  static const String _notesBox = 'notes';
   static const String _metadataBox = 'metadata';
 
   late Box<Map> _dictionaryCache;
   late Box<Map> _diseasesCache;
   late Box<Map> _drugsCache;
   late Box<Map> _booksCache;
+  late Box<Map> _notesCache;
   late Box<String> _metadataCache;
 
   Future<void> init() async {
@@ -28,6 +31,7 @@ class CacheService {
     _diseasesCache = await Hive.openBox<Map>(_diseasesBox);
     _drugsCache = await Hive.openBox<Map>(_drugsBox);
     _booksCache = await Hive.openBox<Map>(_booksBox);
+    _notesCache = await Hive.openBox<Map>(_notesBox);
     _metadataCache = await Hive.openBox<String>(_metadataBox);
   }
 
@@ -97,6 +101,28 @@ class CacheService {
         .toList();
   }
 
+  // Note methods
+  Future<void> cacheNotes(List<Note> notes) async {
+    final Map<String, Map<String, dynamic>> noteMap = {};
+    for (final note in notes) {
+      noteMap[note.name] = note.toJson();
+    }
+    await _notesCache.putAll(noteMap);
+    await _setDataLoaded('notes', true);
+  }
+
+  Future<void> mergeNoteUpdates(List<Note> updates) async {
+    for (final note in updates) {
+      await _notesCache.put(note.name, note.toJson());
+    }
+  }
+
+  List<Note> getCachedNotes() {
+    return _notesCache.values
+        .map((json) => Note.fromJson(Map<String, dynamic>.from(json)))
+        .toList();
+  }
+
   // Book methods
   Future<void> cacheBooks(List<Book> books) async {
     final Map<String, Map<String, dynamic>> bookMap = {};
@@ -138,6 +164,8 @@ class CacheService {
         return _drugsCache.isNotEmpty;
       case 'books':
         return _booksCache.isNotEmpty;
+      case 'notes':
+        return _notesCache.isNotEmpty;
       default:
         return false;
     }
@@ -167,6 +195,7 @@ class CacheService {
     await _diseasesCache.clear();
     await _drugsCache.clear();
     await _booksCache.clear();
+    await _notesCache.clear();
     await _metadataCache.clear();
   }
 
@@ -183,6 +212,9 @@ class CacheService {
         break;
       case 'books':
         await _booksCache.clear();
+        break;
+      case 'notes':
+        await _notesCache.clear();
         break;
     }
     await _setDataLoaded(dataType, false);

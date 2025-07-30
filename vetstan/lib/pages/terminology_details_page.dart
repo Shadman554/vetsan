@@ -73,14 +73,17 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
                   SizedBox(height: 20),
                   Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text(
-                      widget.terminology.name,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    child: Directionality(
+                      textDirection: languageProvider.textDirection,
+                      child: Text(
+                        widget.terminology.name,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
                   SizedBox(height: 20),
@@ -147,7 +150,7 @@ ${widget.terminology.description}''';
                               SnackBar(content: Text('Copied to clipboard')),
                             );
                           },
-                          label: languageProvider.translate('copy'),
+                          label: 'کۆپی',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -160,8 +163,8 @@ ${widget.terminology.description}''';
                             }
                           },
                           label: isFavorite 
-                            ? languageProvider.translate('saved')
-                            : languageProvider.translate('save'),
+                            ? 'پاشەکەوتکراوە'
+                            : 'پاشەکەوتکردن',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -173,7 +176,7 @@ ${widget.terminology.arabic}
 ${widget.terminology.description}''';
                             Share.share(content);
                           },
-                          label: languageProvider.translate('share'),
+                          label: 'هاوبەشکردن',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -182,7 +185,7 @@ ${widget.terminology.description}''';
                             final FlutterTts flutterTts = FlutterTts();
                             await flutterTts.speak(widget.terminology.name);
                           },
-                          label: languageProvider.translate('audio'),
+                          label: 'دەنگ',
                           themeProvider: themeProvider,
                         ),
                       ],
@@ -200,7 +203,7 @@ ${widget.terminology.description}''';
                 children: [
                   if (widget.terminology.kurdish.isNotEmpty) ...[
                     _buildInfoSection(
-                      languageProvider.translate('Kurdish'),
+                      'کوردی',
                       widget.terminology.kurdish,
                       Icons.translate,
                       themeProvider.isDarkMode 
@@ -212,7 +215,7 @@ ${widget.terminology.description}''';
                   ],
                   if (widget.terminology.arabic.isNotEmpty) ...[
                     _buildInfoSection(
-                      languageProvider.translate('Arabic'),
+                      'عەرەبی',
                       widget.terminology.arabic,
                       Icons.language,
                       themeProvider.isDarkMode 
@@ -224,7 +227,7 @@ ${widget.terminology.description}''';
                   ],
                   if (widget.terminology.description.isNotEmpty)
                     _buildInfoSection(
-                      languageProvider.translate('Description'),
+                      'پێناسە',
                       widget.terminology.description,
                       Icons.description,
                       themeProvider.isDarkMode 
@@ -286,6 +289,8 @@ ${widget.terminology.description}''';
     Color color,
     ThemeProvider themeProvider,
   ) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -305,40 +310,51 @@ ${widget.terminology.description}''';
             ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: languageProvider.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
                 ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              SizedBox(width: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: themeProvider.isDarkMode 
-                    ? Colors.white 
-                    : color,
+                SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: themeProvider.isDarkMode 
+                        ? Colors.white 
+                        : color,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           SizedBox(height: 16),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 16,
-              color: themeProvider.isDarkMode 
-                ? Colors.grey[400] 
-                : Colors.black87,
-              height: 1.6,
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Text(
+              content,
+              textDirection: languageProvider.textDirection,
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+              style: TextStyle(
+                fontSize: 16,
+                color: themeProvider.isDarkMode 
+                  ? Colors.grey[400] 
+                  : Colors.black87,
+                height: 1.6,
+              ),
             ),
           ),
         ],

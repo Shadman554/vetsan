@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/foundation.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -18,8 +19,10 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'vetstan.db');
     
-    // Delete existing database to start fresh (remove this in production)
-    await deleteDatabase(path);
+    // Delete existing database only in debug mode to start fresh during development
+    if (kDebugMode) {
+      await deleteDatabase(path);
+    }
     
     return await openDatabase(
       path,

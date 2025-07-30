@@ -1,0 +1,16 @@
+Google Logo Setup Instructions
+==============================
+
+To complete the Google Sign-In setup, you need to add a Google logo image:
+
+1. Download the official Google logo from: https://developers.google.com/identity/branding-guidelines
+2. Save it as "google_logo.png" in this directory (assets/images/)
+3. Recommended size: 24x24 pixels or 48x48 pixels (will be scaled to 24x24)
+4. Use PNG format with transparent background
+
+Alternative:
+- You can use any Google logo image you have
+- Just make sure it's named "google_logo.png"
+- The app will show a fallback icon if the image is not found
+
+The Google Sign-In button will work without the logo image, but it will show a generic login icon instead.

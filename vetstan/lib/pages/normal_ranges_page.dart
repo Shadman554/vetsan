@@ -184,7 +184,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
   // Build the search bar with filter button
   Widget _buildSearchBar(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    Provider.of<LanguageProvider>(context, listen: false);
     final isDarkMode = themeProvider.isDarkMode;
     final iconColor = isDarkMode ? Colors.white.withOpacity(0.6) : Colors.grey;
     
@@ -218,7 +218,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
                 fontSize: 16,
               ),
               decoration: InputDecoration(
-                hintText: languageProvider.translate('Search normal ranges...'),
+                hintText: 'گەڕان بە نۆرماڵ رێژەکان...',
                 hintStyle: TextStyle(
                   color: iconColor,
                 ),
@@ -299,7 +299,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
     final isDarkMode = themeProvider.isDarkMode;
 
     return Scaffold(
@@ -323,7 +323,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          languageProvider.translate('Normal Ranges'),
+          'نۆرماڵ رێژەکان',
           style: TextStyle(
             color: isDarkMode
                 ? themeProvider.theme.colorScheme.onSurface
@@ -363,7 +363,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
                       ),
                       SizedBox(height: 16),
                       Text(
-                        languageProvider.translate('No normal ranges found'),
+                        'هیچ نۆرماڵ رێژەیەک نەدۆزرایەوە',
                         style: TextStyle(
                           color: themeProvider.isDarkMode
                               ? Colors.grey[500]
@@ -399,7 +399,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                languageProvider.translate('Active Filters'),
+                                'فیلتەرە چالاکەکان',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
@@ -534,20 +534,20 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
                                               ),
                                               children: [
                                                 _buildTableHeaderCell(
-                                                  languageProvider.translate('Species'), 
+                                                  'جۆر', 
                                                   themeProvider
                                                 ),
                                                 _buildTableHeaderCell(
                                                   firstRange.minValue.isNotEmpty && !firstRange.minValue.startsWith('<') && !firstRange.minValue.startsWith('>')
-                                                      ? '${languageProvider.translate('Min')}${firstRange.unit.isNotEmpty ? '\n(${firstRange.unit})' : ''}'
-                                                      : languageProvider.translate('Value'),
+                                                      ? 'کەمترین${firstRange.unit.isNotEmpty ? '\n(${firstRange.unit})' : ''}'
+                                                      : 'نرخ',
                                                   themeProvider
                                                 ),
                                                 if (firstRange.minValue.isNotEmpty && firstRange.maxValue.isNotEmpty && 
                                                     !firstRange.minValue.startsWith('<') && !firstRange.minValue.startsWith('>') &&
                                                     !firstRange.maxValue.startsWith('<') && !firstRange.maxValue.startsWith('>'))
                                                   _buildTableHeaderCell(
-                                                    '${languageProvider.translate('Max')}${firstRange.unit.isNotEmpty ? '\n(${firstRange.unit})' : ''}',
+                                                    'زۆرترین${firstRange.unit.isNotEmpty ? '\n(${firstRange.unit})' : ''}',
                                                     themeProvider
                                                   )
                                                 else
@@ -623,7 +623,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
 
   void _showFilterOptions(BuildContext context) {
     final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    Provider.of<LanguageProvider>(context, listen: false);
     
     String? newCategory = _selectedCategory;
     String? newSpecies = _selectedSpecies;
@@ -650,7 +650,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
               ),
             ),
             Text(
-              languageProvider.translate('Filter Ranges'),
+              'فیلتەرکردنی رێژەکان',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -661,21 +661,21 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
             // Category Filter
             _buildFilterSection(
               context: context,
-              title: languageProvider.translate('Category'),
+              title: 'پۆل',
               value: newCategory,
               items: [null, ..._categories],
               onChanged: (value) => newCategory = value,
-              displayText: (value) => value ?? languageProvider.translate('All Categories'),
+              displayText: (value) => value ?? 'هەموو پۆلەکان',
             ),
             const SizedBox(height: 16),
             // Species Filter
             _buildFilterSection(
               context: context,
-              title: languageProvider.translate('Species'),
+              title: 'جۆر',
               value: newSpecies,
               items: [null, ..._speciesList],
               onChanged: (value) => newSpecies = value,
-              displayText: (value) => value ?? languageProvider.translate('All Species'),
+              displayText: (value) => value ?? 'هەموو جۆرەکان',
             ),
             const SizedBox(height: 24),
             // Apply Button
@@ -697,7 +697,7 @@ class _NormalRangesPageState extends State<NormalRangesPage> with SingleTickerPr
                   ),
                 ),
                 child: Text(
-                  languageProvider.translate('Apply Filters'),
+                  'جێبەجێکردنی فیلتەرەکان',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

@@ -1,0 +1,38 @@
+{
+  "project_info": {
+    "project_number": "926387769090",
+    "project_id": "vetdictplus-467217",
+    "storage_bucket": "vetdictplus-467217.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:926387769090:android:1234567890abcdef",
+        "android_client_info": {
+          "package_name": "com.shada.vetdictplus"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "926387769090-nkgt66ug0vjtkndsa8kh0gupcv0aqmis.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.shada.vetdictplus",
+            "certificate_hash": "0252b0dc16b4c8583abfd197c360ebd5754100dd"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDummyKeyForGoogleSignIn123456789"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

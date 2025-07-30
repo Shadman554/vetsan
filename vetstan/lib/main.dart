@@ -12,10 +12,12 @@ import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/font_size_provider.dart';
 import 'providers/favorites_provider.dart';
+import 'providers/auth_provider.dart';
 import '../providers/history_provider.dart';
 import 'pages/favorites_page.dart';
 import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
+
 import 'pages/drugs.dart';
 import 'pages/diseases.dart';
 import 'pages/terminology.dart';
@@ -26,7 +28,11 @@ import 'pages/books.dart';
 import 'pages/instruments_page.dart';
 import 'pages/normal_ranges_page.dart';
 import 'pages/slides.dart';
+import 'pages/notes_page.dart';
+import 'pages/about_page.dart';
+import 'pages/introduction_page.dart';
 import 'utils/page_transition.dart';
+import 'models/drug.dart';
 import 'models/disease.dart';
 import 'models/word.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -37,6 +43,12 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Lock screen orientation to portrait only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   // Pre-load SharedPreferences instance to avoid multiple async calls later
   await SharedPreferences.getInstance();
@@ -54,6 +66,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => FontSizeProvider()),
           ChangeNotifierProvider(create: (_) => FavoritesProvider()),
           ChangeNotifierProvider(create: (_) => HistoryProvider()),
+          ChangeNotifierProvider(create: (_) => AuthProvider()),
         ],
         child: const MyApp(),
       ),
@@ -94,18 +107,8 @@ class _MyAppState extends State<MyApp> {
       ),
     );
 
-    // Run the app with providers
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => FavoritesProvider()),
-        ChangeNotifierProvider(create: (_) => FontSizeProvider()),
-        ChangeNotifierProvider(create: (_) => HistoryProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationProvider()),
-      ],
-      child: const MyAppContent(),
-    );
+    // Return the app content directly since providers are already created in main()
+    return const MyAppContent();
   }
 }
 
@@ -119,7 +122,7 @@ class MyAppContent extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: languageProvider.translate('app_name'),
+      title: 'VET+',
       locale: languageProvider.currentLocale,
       theme: themeProvider.theme.copyWith(
         splashColor: Colors.transparent,
@@ -127,22 +130,21 @@ class MyAppContent extends StatelessWidget {
         splashFactory: NoSplash.splashFactory,
       ),
       supportedLocales: const [
-        Locale('en', 'US'),
-        Locale('ar', 'IQ'), // Using Arabic as fallback for RTL support
+        Locale('ku'), // Kurdish
+        Locale('en'), // English
+        Locale('ar', 'IQ'), // Arabic for RTL support
       ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
       ],
       localeResolutionCallback: (locale, supportedLocales) {
-        // If the locale is Kurdish, use Arabic as the fallback for RTL support
-        if (locale?.languageCode == 'ku') {
+        // Use Arabic as the fallback for RTL support when Kurdish is selected
+        if (languageProvider.currentLocale.languageCode == 'ku') {
           return const Locale('ar', 'IQ');
         }
-        // Default to English
-        return const Locale('en', 'US');
+        return languageProvider.currentLocale;
       },
       builder: (context, child) {
         final fontSizeProvider = Provider.of<FontSizeProvider>(context);
@@ -151,9 +153,7 @@ class MyAppContent extends StatelessWidget {
             textScaleFactor: fontSizeProvider.fontSize,
           ),
           child: Directionality(
-            textDirection: languageProvider.currentLocale.languageCode == 'ku'
-                ? TextDirection.rtl
-                : TextDirection.ltr,
+            textDirection: TextDirection.ltr, // Keep LTR layout for UI elements
             child: child!,
           ),
         );
@@ -172,6 +172,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   List<dynamic> _allItems = [];
   List<dynamic> _filteredItems = [];
   OverlayEntry? _overlayEntry;
@@ -353,51 +354,82 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: Provider.of<LanguageProvider>(context).isRTL 
+                      ? CrossAxisAlignment.end 
+                      : CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      Provider.of<LanguageProvider>(context)
-                          .translate('Welcome to Vet Dict+'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        height: 1.2,
+                    Directionality(textDirection: Provider.of<LanguageProvider>(context).textDirection,
+   
+                      child: Text(
+                        'بەخێربێن بۆ +VET DICT',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          height: 1.2,
+                        ),
+                        textAlign: Provider.of<LanguageProvider>(context).isRTL 
+                            ? TextAlign.right 
+                            : TextAlign.left,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      Provider.of<LanguageProvider>(context).translate(
-                          'One of the best veterinary dictionary'),
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 16,
-                        height: 1.3,
+                    Directionality(textDirection: Provider.of<LanguageProvider>(context).textDirection,
+   
+                      child: Text(
+                        'یەکێک لە باشترین فەرهەنگەکان بۆ خوێندکارانی پزیشکی ڤێتیرنەری.',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 16,
+                          height: 1.3,
+                        ),
+                        textAlign: Provider.of<LanguageProvider>(context).isRTL 
+                            ? TextAlign.right 
+                            : TextAlign.left,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
+                    Align(
+                      alignment: Provider.of<LanguageProvider>(context).isRTL 
+                          ? Alignment.centerRight 
+                          : Alignment.centerLeft,
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            createRoute(const IntroductionPage()),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
                           ),
-                        ],
-                      ),
-                      child: Text(
-                        Provider.of<LanguageProvider>(context).translate('get start'),
-                        style: TextStyle(
-                          color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
+                          decoration: BoxDecoration(
+                            color:
+                                Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor,
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: Directionality(
+                            textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                            child: Text(
+                              'دەستپێکردن',
+                              style: TextStyle(
+                                color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: Provider.of<LanguageProvider>(context).isRTL 
+                                  ? TextAlign.right 
+                                  : TextAlign.left,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -438,11 +470,17 @@ class _HomePageState extends State<HomePage> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildActionItem(Icons.share,
-                  Provider.of<LanguageProvider>(context).translate('share'), Colors.green),
+                  'هاوبەشکردن', Colors.green),
               _buildActionItem(Icons.star_border,
-                  Provider.of<LanguageProvider>(context).translate('rate'), Colors.amber),
+                  'هەڵسەنگاندن', Colors.amber),
               _buildActionItem(Icons.info_outline,
-                  Provider.of<LanguageProvider>(context).translate('about'), Colors.blue),
+                  'دەربارە', Colors.blue,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      createRoute(const AboutPage()),
+                    );
+                  }),
             ],
           ),
         ),
@@ -453,93 +491,111 @@ class _HomePageState extends State<HomePage> {
   List<Widget> _buildFeatureItems() {
     final List<Map<String, dynamic>> allFeatures = [
       {
+        'id': 'drugs',
         'icon': 'Drugs.png',
-        'title': 'drugs',
+        'title': 'دەرمانەکان',
         'color': const Color(0xFF2563EB)
       },
       {
+        'id': 'diseases',
         'icon': 'Diseases.png',
-        'title': 'diseases',
+        'title': 'نەخۆشیەکان',
         'color': const Color(0xFF16A34A)
       },
       {
+        'id': 'terminology',
         'icon': 'Terminology.png',
-        'title': 'terminology',
+        'title': 'زاراوەکان',
         'color': const Color(0xFFEAB308)
       },
       {
+        'id': 'tests',
         'icon': 'tests.png',
-        'title': 'tests',
+        'title': 'پشکنینەکان',
         'color': const Color(0xFFDB2777)
       },
       {
+        'id': 'slides',
         'icon': 'slide.png',
-        'title': 'slides',
+        'title': 'سڵایدەکان',
         'color': const Color(0xFF475569)
       },
       {
+        'id': 'normal_range',
         'icon': 'Normalrange.png',
-        'title': 'normal range',
+        'title': 'پێوانە ئاساییەکان',
         'color': const Color(0xFF0891B2)
       },
       {
+        'id': 'instruments',
         'icon': 'insturments.png',
-        'title': 'instruments',
+        'title': 'کەرەستە پزیشکیەکان',
         'color': const Color(0xFF7C3AED)
       },
       {
+        'id': 'notes',
         'icon': 'Note.png',
-        'title': 'notes',
+        'title': 'تێبینیەکان',
         'color': const Color(0xFFDC2626)
       },
       {
+        'id': 'haematology',
         'icon': 'Haematology.png',
         'title': 'haematology',
         'color': const Color(0xFFEF4444)
       },
       {
+        'id': 'serology',
         'icon': 'Serology.png',
         'title': 'serology',
         'color': const Color(0xFF10B981)
       },
       {
+        'id': 'endocrinology',
         'icon': 'Endocrinology.png',
         'title': 'endocrinology',
         'color': const Color(0xFF6366F1)
       },
       {
+        'id': 'biochemistry',
         'icon': 'Biochemistry.png',
         'title': 'biochemistry',
         'color': const Color(0xFFF59E0B)
       },
       {
+        'id': 'bacteriology',
         'icon': 'Bacteriology.png',
         'title': 'bacteriology',
         'color': const Color(0xFF8B5CF6)
       },
       {
+        'id': 'autoimmunity',
         'icon': 'Autoimmunity.png',
         'title': 'autoimmunity',
         'color': const Color(0xFFEC4899)
       },
       {
+        'id': 'genetics',
         'icon': 'Genetics.png',
         'title': 'genetics',
         'color': const Color(0xFF14B8A6)
       },
       {
+        'id': 'drugs_alt',
         'icon': 'pills_14705111.png',
         'title': 'drugs',
         'color': const Color(0xFF00B4A2)
       },
       {
+        'id': 'settings',
         'icon': 'flask_8385644.png',
-        'title': 'settings',
+        'title': 'ڕێکخستن',
         'color': const Color(0xFF2563EB)
       },
       {
+        'id': 'books',
         'icon': 'book_14705111.png',
-        'title': 'books',
+        'title': 'کتێبەکان',
         'color': const Color(0xFF14B8A6)
       },
     ];
@@ -552,44 +608,101 @@ class _HomePageState extends State<HomePage> {
         feature['icon'] as String,
         feature['title'] as String,
         feature['color'] as Color,
+        id: feature['id'] as String,
         inBottomSheet: false)).toList();
   }
 
   @override
   void initState() {
     super.initState();
+    print('HomePage initState called - fetching data...');
     _fetchAllData();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _removeOverlay();
     super.dispose();
   }
 
   Future<void> _fetchAllData() async {
     try {
-      // Initialize empty lists
-      final drugs = [];
-      final diseases = [];
-      final terms = [];
-      final normalRanges = [];
+      print('Starting to fetch data...');
+      final syncService = SyncService();
+      
+      // Ensure cache service is initialized first
+      await syncService.initializeApp();
+      
+      // Load data using sync service (handles both cached and API data)
+      final drugsData = await syncService.loadCategoryData<Drug>('drugs');
+      final diseasesData = await syncService.loadCategoryData<Disease>('diseases');
+      final termsData = await syncService.loadCategoryData<Word>('dictionary');
+      
+      print('Raw data loaded:');
+      print('- Drugs: ${drugsData.length}');
+      print('- Diseases: ${diseasesData.length}');
+      print('- Terms: ${termsData.length}');
+      
+      // Convert to Map format with type field for search
+      final drugs = drugsData.map((drug) => {
+        'id': drug.id,
+        'name': drug.name,
+        'kurdish': drug.kurdish,
+        'arabic': '', // Drug model doesn't have arabic field
+        'usage': drug.usage,
+        'sideEffect': drug.sideEffect,
+        'otherInfo': drug.otherInfo,
+        'description': drug.description,
+        'drugClass': drug.drugClass,
+        'type': 'drug',
+      }).toList();
 
-      // Update UI with empty data
+      final diseases = diseasesData.map((disease) => {
+        'id': disease.id,
+        'name': disease.name,
+        'kurdish': disease.kurdish,
+        'arabic': '', // Disease model doesn't have arabic field
+        'cause': disease.cause,
+        'control': disease.control,
+        'symptoms': disease.symptoms,
+        'category': disease.category,
+        'imageUrl': disease.imageUrl,
+        'type': 'disease',
+      }).toList();
+
+      final terms = termsData.map((term) => {
+        'id': term.id,
+        'name': term.name,
+        'kurdish': term.kurdish,
+        'arabic': term.arabic,
+        'description': term.description,
+        'type': 'terminology',
+      }).toList();
+
+      // Combine all data and update both _allItems and _filteredItems
       if (!mounted) return;
       setState(() {
-        _filteredItems = [...drugs, ...diseases, ...terms, ...normalRanges];
+        _allItems = [...drugs, ...diseases, ...terms];
+        _filteredItems = [];
       });
+      
+      print('Total items loaded for search: ${_allItems.length}');
     } catch (e) {
+      print('Error loading data for search: $e');
       if (!mounted) return;
       setState(() {
+        _allItems = [];
         _filteredItems = [];
       });
     }
   }
 
   void _filterItems(String query) {
+    print('Search query: "$query"');
+    print('Total items in _allItems: ${_allItems.length}');
+    
     if (query.isEmpty) {
       setState(() {
         _filteredItems = [];
@@ -609,19 +722,47 @@ class _HomePageState extends State<HomePage> {
         if (_selectedFilter != 'All') {
           final itemType = item['type']?.toLowerCase() ?? '';
           final filterType = _selectedFilter.toLowerCase();
-          if (filterType == 'drugs' && itemType != 'drug' ||
-              filterType == 'diseases' && itemType != 'disease' ||
-              filterType == 'terminology' && itemType != 'term' ||
-              filterType == 'normal ranges' && itemType != 'normal_range') { 
+          
+          // Check if item matches the selected filter
+          bool matchesFilter = false;
+          switch (filterType) {
+            case 'drugs':
+              matchesFilter = itemType == 'drug';
+              break;
+            case 'diseases':
+              matchesFilter = itemType == 'disease';
+              break;
+            case 'terminology':
+              matchesFilter = itemType == 'terminology';
+              break;
+            case 'instruments':
+              matchesFilter = itemType == 'instrument';
+              break;
+            case 'normal ranges':
+              matchesFilter = itemType == 'normal_range';
+              break;
+            default:
+              matchesFilter = true;
+          }
+          
+          if (!matchesFilter) {
             return false;
           }
         }
 
-        return name.contains(searchQuery) || 
+        final matches = name.contains(searchQuery) || 
                kurdish.contains(searchQuery) || 
                arabic.contains(searchQuery);
+        
+        if (matches) {
+          print('Found match: ${item['name']} (${item['type']})');
+        }
+        
+        return matches;
       }).toList();
     });
+    
+    print('Filtered results: ${_filteredItems.length}');
     _showSearchResults();
   }
 
@@ -682,7 +823,7 @@ class _HomePageState extends State<HomePage> {
         return Icons.medical_services_outlined;
       case 'disease':
         return Icons.healing_outlined;
-      case 'term':
+      case 'terminology':
         return Icons.book_outlined;
       case 'instrument':
         return Icons.medical_services_outlined;
@@ -699,7 +840,7 @@ class _HomePageState extends State<HomePage> {
         return item['category'] ?? 'Drug';
       case 'disease':
         return item['kurdish'] ?? item['category'] ?? 'Disease';
-      case 'term':
+      case 'terminology':
         return item['kurdish'] ?? item['arabic'] ?? 'Term';
       case 'instrument':
         return item['category'] ?? 'Instrument';
@@ -711,10 +852,28 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _navigateToDetails(Map<String, dynamic> item) {
-    if (item['type'] == 'drug') {
+  // Unfocus search field before navigation to prevent keyboard from showing when returning
+  if (_searchFocusNode.hasFocus) {
+    _searchFocusNode.unfocus();
+  }
+  
+  if (item['type'] == 'drug') {
       if (!context.mounted) return;
       Navigator.push(context, MaterialPageRoute(
-        builder: (context) => DrugDetailsPage(drug: item),
+        builder: (context) => DrugDetailsPage(
+          drug: Drug(
+            id: item['id'],
+            name: item['name'],
+            kurdish: item['kurdish'],
+            usage: item['usage'],
+            sideEffect: item['sideEffect'],
+            otherInfo: item['otherInfo'],
+            description: item['description'],
+            drugClass: item['drugClass'],
+            category: item['category'] ?? '',
+            imageUrl: item['imageUrl'] ?? '',
+          ),
+        ),
       ));
     } else if (item['type'] == 'disease') {
       if (!context.mounted) return;
@@ -779,37 +938,42 @@ class _HomePageState extends State<HomePage> {
             width: 1,
           ),
         ),
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Icon(
-                Icons.search,
-                color: Provider.of<ThemeProvider>(context).isDarkMode
-                    ? Colors.white.withOpacity(0.6)
-                    : Colors.grey,
+        child: Directionality(
+          textDirection: Provider.of<LanguageProvider>(context).textDirection,
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(
+                  Icons.search,
+                  color: Provider.of<ThemeProvider>(context).isDarkMode
+                      ? Colors.white.withOpacity(0.6)
+                      : Colors.grey,
+                ),
               ),
-            ),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                onChanged: _filterItems,
-                decoration: InputDecoration(
-                  hintText: Provider.of<LanguageProvider>(context).translate('search'),
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  onChanged: _filterItems,
+                  autofocus: false,
+                  textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                  decoration: InputDecoration(
+                    hintText: 'گەڕان...',
+                    border: InputBorder.none,
+                    hintStyle: TextStyle(
+                      color: Provider.of<ThemeProvider>(context).isDarkMode
+                          ? Colors.white.withOpacity(0.6)
+                          : Colors.grey,
+                    ),
+                  ),
+                  style: TextStyle(
                     color: Provider.of<ThemeProvider>(context).isDarkMode
-                        ? Colors.white.withOpacity(0.6)
-                        : Colors.grey,
+                        ? Colors.white
+                        : Colors.black,
                   ),
                 ),
-                style: TextStyle(
-                  color: Provider.of<ThemeProvider>(context).isDarkMode
-                      ? Colors.white
-                      : Colors.black,
-                ),
               ),
-            ),
             if (_searchController.text.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.close),
@@ -839,6 +1003,7 @@ class _HomePageState extends State<HomePage> {
               onPressed: () => _showFilterOptions(context),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -873,7 +1038,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Filter By',
+                    'فلتەرکردن بەپێی',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -887,7 +1052,7 @@ class _HomePageState extends State<HomePage> {
                       _filterItems(_searchController.text);
                       Navigator.pop(context);
                     },
-                    child: _buildFilterOption('All', Icons.all_inclusive, Colors.blue),
+                    child: _buildFilterOption('هەموو', Icons.all_inclusive, Colors.blue, 'All'),
                   ),
                   InkWell(
                     onTap: () {
@@ -895,7 +1060,7 @@ class _HomePageState extends State<HomePage> {
                       _filterItems(_searchController.text);
                       Navigator.pop(context);
                     },
-                    child: _buildFilterOption('Drugs', Icons.medication, Colors.green),
+                    child: _buildFilterOption('دەرمانەکان', Icons.medication, Colors.green, 'Drugs'),
                   ),
                   InkWell(
                     onTap: () {
@@ -903,7 +1068,7 @@ class _HomePageState extends State<HomePage> {
                       _filterItems(_searchController.text);
                       Navigator.pop(context);
                     },
-                    child: _buildFilterOption('Diseases', Icons.medical_services, Colors.orange),
+                    child: _buildFilterOption('نەخۆشیەکان', Icons.medical_services, Colors.orange, 'Diseases'),
                   ),
                   InkWell(
                     onTap: () {
@@ -911,7 +1076,7 @@ class _HomePageState extends State<HomePage> {
                       _filterItems(_searchController.text);
                       Navigator.pop(context);
                     },
-                    child: _buildFilterOption('Terminology', Icons.menu_book, Colors.purple),
+                    child: _buildFilterOption('زاراوەکان', Icons.menu_book, Colors.purple, 'Terminology'),
                   ),
                   InkWell(
                     onTap: () {
@@ -919,7 +1084,7 @@ class _HomePageState extends State<HomePage> {
                       _filterItems(_searchController.text);
                       Navigator.pop(context);
                     },
-                    child: _buildFilterOption('Instruments', Icons.medical_services_outlined, Colors.pink),
+                    child: _buildFilterOption('کەرەستە پزیشکیەکان', Icons.medical_services_outlined, Colors.pink, 'Instruments'),
                   ),
                   InkWell(
                     onTap: () {
@@ -927,7 +1092,7 @@ class _HomePageState extends State<HomePage> {
                       _filterItems(_searchController.text);
                       Navigator.pop(context);
                     },
-                    child: _buildFilterOption('Normal Ranges', Icons.list_alt_outlined, Colors.cyan.shade700), 
+                    child: _buildFilterOption('پێوانە ئاساییەکان', Icons.list_alt_outlined, Colors.cyan.shade700, 'Normal Ranges'), 
                   ),
                 ],
               ),
@@ -938,51 +1103,65 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildFilterOption(String text, IconData icon, Color color) {
+  Widget _buildFilterOption(String text, IconData icon, Color color, String filterKey) {
     final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final isSelected = _selectedFilter == filterKey;
+    
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isDarkMode ? Colors.black12 : Colors.grey.withOpacity(0.05),
+        color: isSelected 
+            ? color.withOpacity(0.1) 
+            : (isDarkMode ? Colors.black12 : Colors.grey.withOpacity(0.05)),
         borderRadius: BorderRadius.circular(12),
+        border: isSelected 
+            ? Border.all(color: color.withOpacity(0.3), width: 1)
+            : null,
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+      child: Directionality(
+        textDirection: languageProvider.textDirection,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(isSelected ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 20,
+              ),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 20,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isDarkMode ? Colors.white : Colors.black87,
+                ),
+                textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 16,
-              color: isDarkMode ? Colors.white : Colors.black87,
-            ),
-          ),
-          const Spacer(),
-          if (_selectedFilter == text)
-            Icon(
-              Icons.check_circle,
-              color: color,
-              size: 20,
-            ),
-        ],
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                color: color,
+                size: 20,
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildFeatureItem(dynamic icon, String title, Color color,
-      {bool inBottomSheet = false}) {
+      {required String id, bool inBottomSheet = false}) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
 
@@ -1006,37 +1185,53 @@ class _HomePageState extends State<HomePage> {
 
     return InkWell(
       onTap: () {
-        if (title == 'drugs') {
+        // Unfocus search field before navigation to prevent keyboard from showing when returning
+        if (_searchFocusNode.hasFocus) {
+          _searchFocusNode.unfocus();
+        }
+        
+        if (id == 'drugs') {
           Navigator.push(
             context,
             createRoute(const DrugsPage()),
           );
-        } else if (title == 'diseases') {
+        } else if (id == 'diseases') {
           Navigator.push(
             context,
             createRoute(const DiseasesPage()),
           );
-        } else if (title == 'terminology') {
+        } else if (id == 'terminology') {
           Navigator.push(
             context,
             createRoute(const TerminologyPage()),
           );
-        } else if (title == 'tests') {
+        } else if (id == 'tests') {
           _showTestsBottomSheet();
-        } else if (title == 'slides') {
+        } else if (id == 'slides') {
           _showSlidesBottomSheet();
-        } else if (title == 'books') {
+        } else if (id == 'notes') {
+          Navigator.push(
+            context,
+            createRoute(const NotesPage()),
+          );
+        } else if (id == 'books') {
           Navigator.push(
             context,
             createRoute(const BooksPage()),
           );
-        } else if (title == 'normal range') { 
+        } else if (id == 'normal_range') { 
           Navigator.push(context, createRoute(const NormalRangesPage())); 
-        } else if (title == 'instruments') {
+        } else if (id == 'instruments') {
           Navigator.push(
             context,
             createRoute(const InstrumentsPage()),
           );
+        } else if (id == 'settings') {
+          Navigator.push(
+            context,
+            createRoute(const SettingsPage()),
+          );
+
         }
       },
       child: Container(
@@ -1077,18 +1272,21 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 flex: 2,
                 child: Center(
-                  child: Text(
-                    languageProvider.translate(title),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: themeProvider.isDarkMode
-                          ? Colors.white
-                          : const Color(0xFF1E293B),
-                      fontWeight: FontWeight.w500,
+                  child: Directionality(
+                    textDirection: languageProvider.textDirection,
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: themeProvider.isDarkMode
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1099,43 +1297,47 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildActionItem(IconData icon, String label, Color color) {
-    final languageProvider = Provider.of<LanguageProvider>(context);
+  Widget _buildActionItem(IconData icon, String label, Color color, {VoidCallback? onTap}) {
+    Provider.of<LanguageProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: themeProvider.isDarkMode
-                ? color.withOpacity(0.2)
-                : color.withOpacity(0.1),
-            shape: BoxShape.circle,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: themeProvider.isDarkMode
+                  ? color.withOpacity(0.2)
+                  : color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
           ),
-          child: Icon(
-            icon,
-            color: color,
-            size: 24,
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: themeProvider.isDarkMode
+                  ? Colors.white.withOpacity(0.87)
+                  : const Color(0xFF475569),
+              fontSize: 12,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          languageProvider.translate(label),
-          style: TextStyle(
-            color: themeProvider.isDarkMode
-                ? Colors.white.withOpacity(0.87)
-                : const Color(0xFF475569),
-            fontSize: 12,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildShowMoreItem() {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
     final Color moreColor = Colors.blue;
     return Container(
       decoration: BoxDecoration(
@@ -1185,7 +1387,7 @@ class _HomePageState extends State<HomePage> {
                   flex: 2,
                   child: Center(
                     child: Text(
-                      languageProvider.translate('More'),
+                      'زیاتر',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -1213,7 +1415,7 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        final languageProvider = Provider.of<LanguageProvider>(context);
+        Provider.of<LanguageProvider>(context);
         final themeProvider = Provider.of<ThemeProvider>(context);
 
         return Container(
@@ -1238,7 +1440,7 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  languageProvider.translate('all features'),
+                  'هەموو تایبەتمەندییەکان',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1257,33 +1459,33 @@ class _HomePageState extends State<HomePage> {
                   crossAxisSpacing: 16,
                   childAspectRatio: 0.9,
                   children: [
-                    _buildFeatureItem('Drugs.png', 'drugs',
+                    _buildFeatureItem('Drugs.png', 'دەرمانەکان',
                         const Color(0xFF2563EB),
-                        inBottomSheet: true),
-                    _buildFeatureItem('Diseases.png', 'diseases',
+                        id: 'drugs', inBottomSheet: true),
+                    _buildFeatureItem('Diseases.png', 'نەخۆشیەکان',
                         const Color(0xFF16A34A),
-                        inBottomSheet: true),
-                    _buildFeatureItem('Terminology.png', 'terminology',
+                        id: 'diseases', inBottomSheet: true),
+                    _buildFeatureItem('Terminology.png', 'زاراوەکان',
                         const Color(0xFFEAB308),
-                        inBottomSheet: true),
-                    _buildFeatureItem('tests.png', 'tests',
+                        id: 'terminology', inBottomSheet: true),
+                    _buildFeatureItem('tests.png', 'پشکنینەکان',
                         const Color(0xFFDB2777),
-                        inBottomSheet: true),
-                    _buildFeatureItem('slide.png', 'slides',
+                        id: 'tests', inBottomSheet: true),
+                    _buildFeatureItem('slide.png', 'سڵایدەکان',
                         const Color(0xFF475569),
-                        inBottomSheet: true),
-                    _buildFeatureItem('Normalrange.png', 'normal range',
+                        id: 'slides', inBottomSheet: true),
+                    _buildFeatureItem('Normalrange.png', 'پێوانە ئاساییەکان',
                         const Color(0xFF0891B2),
-                        inBottomSheet: true),
-                    _buildFeatureItem('insturments.png', 'instruments',
+                        id: 'normal_range', inBottomSheet: true),
+                    _buildFeatureItem('insturments.png', 'کەرەستە پزیشکیەکان',
                         const Color(0xFF7C3AED),
-                        inBottomSheet: true),
+                        id: 'instruments', inBottomSheet: true),
                     _buildFeatureItem(
-                        'Note.png', 'notes', const Color(0xFFDC2626),
-                        inBottomSheet: true),
+                        'Note.png', 'تێبینیەکان', const Color(0xFFDC2626),
+                        id: 'notes', inBottomSheet: true),
                     _buildFeatureItem(
-                        'books.png', 'books', const Color.fromARGB(255, 117, 25, 203),
-                        inBottomSheet: true),
+                        'books.png', 'کتێبەکان', const Color.fromARGB(255, 117, 25, 203),
+                        id: 'books', inBottomSheet: true),
                   ],
                 ),
               ),
@@ -1319,7 +1521,7 @@ class _HomePageState extends State<HomePage> {
       isScrollControlled: true,
       builder: (context) {
         final themeProvider = Provider.of<ThemeProvider>(context);
-        final languageProvider = Provider.of<LanguageProvider>(context);
+        Provider.of<LanguageProvider>(context);
 
         return Container(
           height: MediaQuery.of(context).size.height * 0.3,
@@ -1343,7 +1545,7 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  languageProvider.translate('Slide Categories'),
+                  'پۆلەکانی سلاید',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1388,8 +1590,8 @@ class _HomePageState extends State<HomePage> {
                             Navigator.pop(context);
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (context) => SlidesPage(initialCategory: category['type']),
+                              createRoute(
+                                SlidesPage(initialCategory: category['type']),
                               ),
                             );
                           },
@@ -1489,7 +1691,7 @@ class _HomePageState extends State<HomePage> {
       isScrollControlled: true,
       builder: (context) {
         final themeProvider = Provider.of<ThemeProvider>(context);
-        final languageProvider = Provider.of<LanguageProvider>(context);
+        Provider.of<LanguageProvider>(context);
 
         return Container(
           height: MediaQuery.of(context).size.height * 0.6,
@@ -1513,7 +1715,7 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  languageProvider.translate('Test Categories'),
+                  'پۆلەکانی تاقیکردنەوە',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1616,7 +1818,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
 
     return Scaffold(
       body: SafeArea(
@@ -1650,27 +1852,31 @@ class _HomePageState extends State<HomePage> {
             tabs: [
               GButton(
                 icon: Icons.favorite_rounded,
-                text: languageProvider.translate('favourites'),
+                text: 'دڵخوازەکان',
               ),
               GButton(
                 icon: Icons.history_rounded,
-                text: languageProvider.translate('history'),
+                text: 'مێژوو',
               ),
               GButton(
                 icon: Icons.home_rounded,
-                text: languageProvider.translate('home'),
+                text: 'سەرەکی',
               ),
               GButton(
                 icon: Icons.menu_book_rounded,
-                text: languageProvider.translate('books'),
+                text: 'کتێبەکان',
               ),
               GButton(
                 icon: Icons.person_rounded,
-                text: languageProvider.translate('profile'),
+                text: 'پرۆفایل',
               ),
             ],
             selectedIndex: _selectedIndex,
             onTabChange: (index) {
+              // Unfocus search field to prevent keyboard from showing
+              if (_searchFocusNode.hasFocus) {
+                _searchFocusNode.unfocus();
+              }
               setState(() {
                 _selectedIndex = index;
               });
@@ -1680,24 +1886,4 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-}
-
-class Drug {
-  final String id;
-  final String name;
-  final String otherInfo;
-  final String sideEffect;
-  final String usage;
-  final String category;
-  final String imageUrl;
-
-  Drug({
-    required this.id,
-    required this.name,
-    required this.otherInfo,
-    required this.sideEffect,
-    required this.usage,
-    required this.category,
-    required this.imageUrl,
-  });
 }

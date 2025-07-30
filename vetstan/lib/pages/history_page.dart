@@ -98,54 +98,76 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
     return showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
-          title: Text(
-            languageProvider.translate('Clear History'),
-            style: TextStyle(
-              color: themeProvider.theme.colorScheme.onSurface,
-            ),
-          ),
-          content: Text(
-            languageProvider.translate('Are you sure you want to clear all history?'),
-            style: TextStyle(
-              color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                languageProvider.translate('No'),
-                style: TextStyle(
-                  color: themeProvider.theme.colorScheme.primary,
-                ),
+        return Directionality(
+          textDirection: languageProvider.textDirection,
+          child: AlertDialog(
+            backgroundColor: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+            title: Text(
+              'پاککردنەوەی مێژوو',
+              style: TextStyle(
+                color: themeProvider.theme.colorScheme.onSurface,
+                fontFamily: 'Inter',
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
             ),
-            TextButton(
-              onPressed: () {
-                historyProvider.clearHistory();
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      languageProvider.translate('History cleared'),
-                      style: TextStyle(
-                        color: themeProvider.theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    backgroundColor: themeProvider.theme.colorScheme.primary,
+            content: Text(
+              'دڵنیایت لە پاککردنەوەی هەموو مێژووەکە؟',
+              style: TextStyle(
+                color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                fontFamily: 'Inter',
+                fontSize: 16,
+              ),
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'نەخێر',
+                  style: TextStyle(
+                    color: themeProvider.theme.colorScheme.primary,
+                    fontFamily: 'Inter',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
-                );
-              },
-              child: Text(
-                languageProvider.translate('Yes'),
-                style: TextStyle(
-                  color: themeProvider.theme.colorScheme.primary,
                 ),
               ),
-            ),
-          ],
+              TextButton(
+                onPressed: () {
+                  historyProvider.clearHistory();
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Directionality(
+                        textDirection: languageProvider.textDirection,
+                        child: Text(
+                          'مێژوو پاک کرایەوە',
+                          style: TextStyle(
+                            color: themeProvider.theme.colorScheme.onSurface,
+                            fontFamily: 'Inter',
+                            fontSize: 16,
+                          ),
+                          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                        ),
+                      ),
+                      backgroundColor: themeProvider.theme.colorScheme.primary,
+                    ),
+                  );
+                },
+                child: Text(
+                  'بەڵێ',
+                  style: TextStyle(
+                    color: themeProvider.theme.colorScheme.primary,
+                    fontFamily: 'Inter',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -154,7 +176,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
   Widget _buildHistoryList(String type) {
     final items = _getFilteredItems(type);
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
 
     if (items.isEmpty) {
       return Center(
@@ -168,7 +190,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             ),
             const SizedBox(height: 16),
             Text(
-              languageProvider.translate('No ${type.toLowerCase()} history'),
+              'هیچ مێژووی ${type.toLowerCase() == 'drug' ? 'دەرمان' : type.toLowerCase() == 'disease' ? 'نەخۆشی' : 'زاراوە'} نییە',
               style: TextStyle(
                 color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
                 fontSize: 18,
@@ -301,7 +323,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    Provider.of<LanguageProvider>(context);
 
     return Scaffold(
       backgroundColor: themeProvider.theme.scaffoldBackgroundColor,
@@ -309,7 +331,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
         elevation: 0,
         backgroundColor: themeProvider.theme.appBarTheme.backgroundColor,
         title: Text(
-          languageProvider.translate('History'),
+          'مێژوو',
           style: themeProvider.theme.appBarTheme.titleTextStyle?.copyWith(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -344,11 +366,48 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
           labelStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            fontFamily: 'Inter',
           ),
           tabs: [
-            Tab(text: languageProvider.translate('Drugs')),
-            Tab(text: languageProvider.translate('Diseases')),
-            Tab(text: languageProvider.translate('Terminology')),
+            Tab(
+              child: Directionality(
+                textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                child: Text(
+                  'دەرمانەکان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ),
+            Tab(
+              child: Directionality(
+                textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                child: Text(
+                  'نەخۆشییەکان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ),
+            Tab(
+              child: Directionality(
+                textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                child: Text(
+                  'زاراوەکان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

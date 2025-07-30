@@ -161,7 +161,7 @@ class _DiseasesPageState extends State<DiseasesPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          languageProvider.translate('diseases'),
+          'نەخۆشییەکان',
           style: TextStyle(
             color: themeProvider.isDarkMode
                 ? themeProvider.theme.colorScheme.onSurface
@@ -190,28 +190,38 @@ class _DiseasesPageState extends State<DiseasesPage> {
                       ),
                     ],
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterDiseases,
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-              decoration: InputDecoration(
-                hintText: languageProvider.translate('Search diseases...'),
-                hintStyle: TextStyle(
-                  color: themeProvider.isDarkMode
-                      ? Colors.grey[600]
-                      : Colors.grey[400],
+            child: Directionality(
+              textDirection: languageProvider.textDirection,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _filterDiseases,
+                textDirection: languageProvider.textDirection,
+                style: TextStyle(
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
                 ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: themeProvider.isDarkMode
-                      ? Colors.grey[600]
-                      : Colors.grey[400],
+                decoration: InputDecoration(
+                  hintText: 'گەڕان بە نەخۆشییەکان...',
+                  hintStyle: TextStyle(
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ),
+                  prefixIcon: languageProvider.isRTL ? null : Icon(
+                    Icons.search,
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ),
+                  suffixIcon: languageProvider.isRTL ? Icon(
+                    Icons.search,
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ) : null,
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
-                border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
@@ -259,7 +269,7 @@ class _DiseasesPageState extends State<DiseasesPage> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        languageProvider.translate('No diseases found'),
+                        'هیچ نەخۆشییەک نەدۆزرایەوە',
                         style: TextStyle(
                           color: themeProvider.isDarkMode
                               ? Colors.grey[500]

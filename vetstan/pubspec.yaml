@@ -40,6 +40,7 @@ dependencies:
   hive_generator: ^2.0.1
   build_runner: ^2.4.8
   flutter_phoenix: ^1.1.1
+  image_picker: ^1.0.4
 
 dev_dependencies:
   flutter_test:
@@ -60,12 +61,24 @@ flutter:
   assets:
     - assets/images/
     - assets/images/stool/
+    - assets/images/persons/
     - assets/translations/
     - assets/data/instruments.json
     - assets/instruments/
-    - assets/Icons/  # Removed redundant `assets/Icons/logo.png`
+    - assets/Icons/  # Feature icons
+    - assets/icon/   # App logo
     - assets/fonts/
   fonts:
     - family: Inter
       fonts:
         - asset: assets/fonts/Inter-Regular.ttf
+    - family: NRT
+      fonts:
+        - asset: assets/fonts/Nrt_bold.ttf
+          weight: 700
+    - family: K24
+      fonts:
+        - asset: assets/fonts/k24.ttf
+    - family: Speda
+      fonts:
+        - asset: assets/fonts/speda.ttf

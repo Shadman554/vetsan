@@ -137,16 +137,19 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
                   // Disease Name
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                    child: Text(
-                      widget.disease.name,
-                      style: TextStyle(
-                        color: themeProvider.isDarkMode 
-                          ? Colors.white 
-                          : Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
+                    child: Directionality(
+                      textDirection: languageProvider.textDirection,
+                      child: Text(
+                        widget.disease.name,
+                        style: TextStyle(
+                          color: themeProvider.isDarkMode 
+                            ? Colors.white 
+                            : Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
                   
@@ -176,7 +179,7 @@ ${widget.disease.control}''';
                               SnackBar(content: Text('Copied to clipboard')),
                             );
                           },
-                          label: languageProvider.translate('copy'),
+                          label: 'کۆپی',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -189,8 +192,8 @@ ${widget.disease.control}''';
                             }
                           },
                           label: isFavorite 
-                            ? languageProvider.translate('saved')
-                            : languageProvider.translate('save'),
+                            ? 'پاشەکەوتکراوە'
+                            : 'پاشەکەوتکردن',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -203,7 +206,7 @@ ${widget.disease.symptoms}
 ${widget.disease.control}''';
                             Share.share(content);
                           },
-                          label: languageProvider.translate('share'),
+                          label: 'هاوبەشکردن',
                           themeProvider: themeProvider,
                         ),
                         _buildActionButton(
@@ -216,8 +219,8 @@ ${widget.disease.control}''';
                             _speak(content.trim());
                           },
                           label: isPlaying 
-                            ? languageProvider.translate('audio')
-                            : languageProvider.translate('audio'),
+                            ? 'وەستان'
+                            : 'دەنگ',
                           themeProvider: themeProvider,
                         ),
                       ],
@@ -235,7 +238,7 @@ ${widget.disease.control}''';
                 children: [
                   if (widget.disease.kurdish.isNotEmpty)
                     _buildInfoSection(
-                      languageProvider.translate('kurdish'),
+                      'کوردی',
                       widget.disease.kurdish,
                       Icons.translate,
                       Colors.blue,
@@ -244,7 +247,7 @@ ${widget.disease.control}''';
                   SizedBox(height: 16),
                   if (widget.disease.cause.isNotEmpty)
                     _buildInfoSection(
-                      languageProvider.translate('cause'),
+                      'هۆکار',
                       widget.disease.cause,
                       Icons.bug_report,
                       Colors.red,
@@ -252,7 +255,7 @@ ${widget.disease.control}''';
                     ),
                   SizedBox(height: 16),
                   _buildInfoSection(
-                    languageProvider.translate('symptoms'),
+                    'نیشانەکان',
                     widget.disease.symptoms,
                     Icons.medical_information,
                     Colors.orange,
@@ -261,7 +264,7 @@ ${widget.disease.control}''';
                   SizedBox(height: 16),
                   if (widget.disease.control.isNotEmpty)
                     _buildInfoSection(
-                      languageProvider.translate('control'),
+                      'کۆنترۆڵ',
                       widget.disease.control,
                       Icons.healing,
                       Colors.green,
@@ -322,6 +325,8 @@ ${widget.disease.control}''';
     Color color,
     ThemeProvider themeProvider,
   ) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+  
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -341,40 +346,51 @@ ${widget.disease.control}''';
             ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: languageProvider.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
                 ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              SizedBox(width: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: themeProvider.isDarkMode 
-                    ? Colors.white 
-                    : color,
+                SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: themeProvider.isDarkMode 
+                        ? Colors.white 
+                        : color,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           SizedBox(height: 16),
-          Text(
-            content,
-            style: TextStyle(
-              fontSize: 16,
-              color: themeProvider.isDarkMode 
-                ? Colors.grey[400] 
-                : Colors.black87,
-              height: 1.6,
+          Directionality(
+            textDirection: languageProvider.textDirection,
+            child: Text(
+              content,
+              textDirection: languageProvider.textDirection,
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+              style: TextStyle(
+                fontSize: 16,
+                color: themeProvider.isDarkMode 
+                  ? Colors.grey[400] 
+                  : Colors.black87,
+                height: 1.6,
+              ),
             ),
           ),
         ],

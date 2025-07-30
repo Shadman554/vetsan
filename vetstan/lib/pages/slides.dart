@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import '../providers/theme_provider.dart';
+import '../providers/language_provider.dart';
+import '../services/api_service.dart';
+import '../models/slide.dart';
 
 class SlidesPage extends StatefulWidget {
   final String initialCategory;
@@ -17,9 +22,10 @@ class SlidesPage extends StatefulWidget {
 
 class _SlidesPageState extends State<SlidesPage> {
   final TextEditingController _searchController = TextEditingController();
-  List<Map<String, String>> _filteredSlides = [];
-  List<Map<String, String>> _allSlides = [];
-  bool _isLoading = false;
+  List<Slide> _filteredSlides = [];
+  List<Slide> _allSlides = [];
+  bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -33,13 +39,44 @@ class _SlidesPageState extends State<SlidesPage> {
     super.dispose();
   }
 
-  void _loadSlides() {
-    setState(() {
-      _isLoading = true;
-      _allSlides = _getSlidesByCategory(widget.initialCategory);
-      _filteredSlides = List.from(_allSlides);
-      _isLoading = false;
-    });
+  Future<void> _loadSlides() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+
+      final apiService = ApiService();
+      List<Slide> slides;
+
+      switch (widget.initialCategory.toLowerCase()) {
+        case 'urine':
+          slides = await apiService.fetchUrineSlides();
+          break;
+        case 'stool':
+          slides = await apiService.fetchStoolSlides();
+          break;
+        case 'other':
+        default:
+          slides = await apiService.fetchOtherSlides();
+          break;
+      }
+
+      if (mounted) {
+        setState(() {
+          _allSlides = slides;
+          _filteredSlides = List.from(_allSlides);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _filterSlides(String query) {
@@ -49,63 +86,19 @@ class _SlidesPageState extends State<SlidesPage> {
       } else {
         _filteredSlides = _allSlides
             .where((slide) =>
-                slide['name']!.toLowerCase().contains(query.toLowerCase()))
+                slide.name.toLowerCase().contains(query.toLowerCase()) ||
+                slide.species.toLowerCase().contains(query.toLowerCase()))
             .toList();
       }
     });
   }
 
-  List<Map<String, String>> _getSlidesByCategory(String category) {
-    if (category == 'Urine') {
-      return [
-        {
-          'image': 'assets/images/urine/urine1.jpg',
-          'name': 'Normal Urine Sediment',
-          'species': 'Canine, Feline',
-        },
-        {
-          'image': 'assets/images/urine/urine2.jpg',
-          'name': 'Crystals in Urine',
-          'species': 'Canine, Feline, Equine',
-        },
-        // Add more urine slides as needed
-      ];
-    } else if (category == 'Stool') {
-      return [
-        {
-          'image': 'assets/images/stool/Stool test.jpg',
-          'name': 'Normal Stool Sample',
-          'species': 'Canine, Feline',
-        },
-        {
-          'image': 'assets/images/stool/stool2.jpg',
-          'name': 'Parasite Eggs',
-          'species': 'Canine, Feline, Bovine',
-        },
-        // Add more stool slides as needed
-      ];
-    } else {
-      // Other slides
-      return [
-        {
-          'image': 'assets/images/other/other1.jpg',
-          'name': 'Blood Smear',
-          'species': 'All Species',
-        },
-        {
-          'image': 'assets/images/other/other2.jpg',
-          'name': 'Cytology',
-          'species': 'All Species',
-        },
-        // Add more other slides as needed
-      ];
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    // Language provider is kept for future localization
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     return Scaffold(
       backgroundColor: themeProvider.isDarkMode
@@ -127,14 +120,18 @@ class _SlidesPageState extends State<SlidesPage> {
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          '${widget.initialCategory} Slides',
-          style: TextStyle(
-            color: themeProvider.isDarkMode
-                ? themeProvider.theme.colorScheme.onSurface
-                : Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
+        title: Directionality(
+          textDirection: languageProvider.textDirection,
+          child: Text(
+            '${widget.initialCategory} سلایدەکان',
+            style: TextStyle(
+              color: themeProvider.isDarkMode
+                  ? themeProvider.theme.colorScheme.onSurface
+                  : Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'NRT',
+            ),
           ),
         ),
         centerTitle: true,
@@ -157,28 +154,40 @@ class _SlidesPageState extends State<SlidesPage> {
                       ),
                     ],
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterSlides,
-              style: TextStyle(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search slides...',
-                hintStyle: TextStyle(
-                  color: themeProvider.isDarkMode
-                      ? Colors.grey[600]
-                      : Colors.grey[400],
+            child: Directionality(
+              textDirection: languageProvider.textDirection,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _filterSlides,
+                textDirection: languageProvider.textDirection,
+                style: TextStyle(
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                  fontFamily: 'NRT',
                 ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: themeProvider.isDarkMode
-                      ? Colors.grey[600]
-                      : Colors.grey[400],
+                decoration: InputDecoration(
+                  hintText: 'گەڕان لە سلایدەکان...',
+                  hintStyle: TextStyle(
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                    fontFamily: 'NRT',
+                  ),
+                  suffixIcon: languageProvider.isRTL ? Icon(
+                    Icons.search,
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ) : null,
+                  prefixIcon: !languageProvider.isRTL ? Icon(
+                    Icons.search,
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey[600]
+                        : Colors.grey[400],
+                  ) : null,
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
-                border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
@@ -186,49 +195,94 @@ class _SlidesPageState extends State<SlidesPage> {
       ),
       body: _isLoading
           ? Center(
-              child: CircularProgressIndicator(
-                color: themeProvider.isDarkMode
-                    ? themeProvider.theme.colorScheme.primary
-                    : Colors.blue,
+              child: LoadingAnimationWidget.threeArchedCircle(
+                color: themeProvider.theme.colorScheme.primary,
+                size: 50,
               ),
             )
-          : _filteredSlides.isEmpty
+          : _hasError
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        Icons.image_not_supported,
+                        Icons.error_outline,
                         size: 80,
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[700]
-                            : Colors.grey[300],
+                        color: Colors.red[400],
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        'No slides found',
-                        style: TextStyle(
-                          color: themeProvider.isDarkMode
-                              ? Colors.grey[500]
-                              : Colors.grey[500],
-                          fontSize: 18,
+                      Directionality(
+                        textDirection: languageProvider.textDirection,
+                        child: Text(
+                          'هەڵەیەک ڕوویدا لە بارکردنی سلایدەکان',
+                          style: TextStyle(
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[400]
+                                : Colors.grey[600],
+                            fontSize: 16,
+                            fontFamily: 'NRT',
+                          ),
+                          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadSlides,
+                        child: Directionality(
+                          textDirection: languageProvider.textDirection,
+                          child: Text(
+                            'هەوڵدانەوە',
+                            style: TextStyle(
+                              fontFamily: 'NRT',
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                  itemCount: _filteredSlides.length,
-                  itemBuilder: (context, index) {
-                    final slide = _filteredSlides[index];
-                    return _buildSlideItem(context, slide, themeProvider);
-                  },
-                ),
+              : _filteredSlides.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.image_not_supported,
+                            size: 80,
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[700]
+                                : Colors.grey[300],
+                          ),
+                          const SizedBox(height: 16),
+                          Directionality(
+                            textDirection: languageProvider.textDirection,
+                            child: Text(
+                              'هیچ سلایدێک نەدۆزرایەوە',
+                              style: TextStyle(
+                                color: themeProvider.isDarkMode
+                                    ? Colors.grey[500]
+                                    : Colors.grey[500],
+                                fontSize: 18,
+                                fontFamily: 'NRT',
+                              ),
+                              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                      itemCount: _filteredSlides.length,
+                      itemBuilder: (context, index) {
+                        final slide = _filteredSlides[index];
+                        return _buildSlideItem(context, slide, themeProvider, languageProvider);
+                      },
+                    ),
     );
   }
 
-  void _showFullScreenImage(BuildContext context, String imagePath, String name) {
+  void _showFullScreenImage(BuildContext context, String imageUrl, String name) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -239,25 +293,23 @@ class _SlidesPageState extends State<SlidesPage> {
             iconTheme: const IconThemeData(color: Colors.white),
             title: Text(
               name,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: 'NRT',
+              ),
             ),
           ),
           body: Center(
             child: PhotoView(
-              imageProvider: AssetImage(imagePath),
+              imageProvider: CachedNetworkImageProvider(imageUrl),
               minScale: PhotoViewComputedScale.contained,
               maxScale: PhotoViewComputedScale.covered * 2,
               initialScale: PhotoViewComputedScale.contained,
               backgroundDecoration: const BoxDecoration(color: Colors.black),
               loadingBuilder: (context, event) => Center(
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    value: event == null
-                        ? 0
-                        : event.cumulativeBytesLoaded / (event.expectedTotalBytes ?? 1),
-                  ),
+                child: LoadingAnimationWidget.threeArchedCircle(
+                  color: Colors.white,
+                  size: 40,
                 ),
               ),
               errorBuilder: (context, error, stackTrace) => Center(
@@ -275,7 +327,7 @@ class _SlidesPageState extends State<SlidesPage> {
   }
 
   Widget _buildSlideItem(
-      BuildContext context, Map<String, String> slide, ThemeProvider themeProvider) {
+      BuildContext context, Slide slide, ThemeProvider themeProvider, LanguageProvider languageProvider) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -287,9 +339,9 @@ class _SlidesPageState extends State<SlidesPage> {
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
               ],
       ),
@@ -297,7 +349,7 @@ class _SlidesPageState extends State<SlidesPage> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            _showFullScreenImage(context, slide['image']!, slide['name']!);
+            _showFullScreenImage(context, slide.imageUrl, slide.name);
           },
           borderRadius: BorderRadius.circular(12),
           child: Column(
@@ -309,13 +361,22 @@ class _SlidesPageState extends State<SlidesPage> {
                 child: Stack(
                   children: [
                     Hero(
-                      tag: slide['image']!,
+                      tag: slide.id,
                       child: AspectRatio(
                         aspectRatio: 16 / 9,
-                        child: Image.asset(
-                          slide['image']!,
+                        child: CachedNetworkImage(
+                          imageUrl: slide.imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
+                          placeholder: (context, url) => Container(
+                            color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.grey[200],
+                            child: Center(
+                              child: LoadingAnimationWidget.threeArchedCircle(
+                                color: themeProvider.theme.colorScheme.primary,
+                                size: 30,
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
                             color: themeProvider.isDarkMode ? Colors.grey[800] : Colors.grey[200],
                             child: Center(
                               child: Icon(
@@ -350,32 +411,39 @@ class _SlidesPageState extends State<SlidesPage> {
               // Content
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      slide['name']!,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: themeProvider.isDarkMode
-                            ? Colors.white
-                            : Colors.black87,
+                child: Directionality(
+                  textDirection: languageProvider.textDirection,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        slide.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: themeProvider.isDarkMode
+                              ? Colors.white
+                              : Colors.black87,
+                          fontFamily: 'NRT',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Species: ${slide['species']}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[400]
-                            : Colors.grey[600],
+                      const SizedBox(height: 8),
+                      Text(
+                        'جۆری ئاژەڵ: ${slide.species}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: themeProvider.isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.grey[600],
+                          fontFamily: 'NRT',
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
