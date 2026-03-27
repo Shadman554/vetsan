@@ -1,10 +1,14 @@
 class NormalRange {
   final String id;
   final String name;
+  final String? parameter;
   final String unit;
   final String minValue;
   final String maxValue;
+  final String? panicLow;
+  final String? panicHigh;
   final String? notes;
+  final String? reference;
   final String? category;
   final String? species;
   final String? sex;
@@ -15,10 +19,14 @@ class NormalRange {
   NormalRange({
     required this.id,
     required this.name,
+    this.parameter,
     required this.unit,
     required this.minValue,
     required this.maxValue,
+    this.panicLow,
+    this.panicHigh,
     this.notes,
+    this.reference,
     this.category,
     this.species,
     this.sex,
@@ -29,12 +37,16 @@ class NormalRange {
 
   factory NormalRange.fromJson(Map<String, dynamic> json) {
     return NormalRange(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
+      parameter: json['parameter'],
       unit: json['unit'] ?? '',
-      minValue: json['min_value'] ?? '',
-      maxValue: json['max_value'] ?? '',
-      notes: json['notes'],
+      minValue: json['min_value']?.toString() ?? '',
+      maxValue: json['max_value']?.toString() ?? '',
+      panicLow: json['panic_low']?.toString(),
+      panicHigh: json['panic_high']?.toString(),
+      notes: json['note'],
+      reference: json['reference'],
       category: json['category'],
       species: json['species'],
       sex: json['sex'],
@@ -48,10 +60,14 @@ class NormalRange {
     return NormalRange(
       id: id,
       name: data['name'] ?? '',
+      parameter: data['parameter'],
       unit: data['unit'] ?? '',
-      minValue: data['min_value'] ?? '',
-      maxValue: data['max_value'] ?? '',
-      notes: data['notes'],
+      minValue: data['min_value']?.toString() ?? '',
+      maxValue: data['max_value']?.toString() ?? '',
+      panicLow: data['panic_low']?.toString(),
+      panicHigh: data['panic_high']?.toString(),
+      notes: data['note'],
+      reference: data['reference'],
       category: data['category'],
       species: data['species'],
       sex: data['sex'],
@@ -70,6 +86,27 @@ class NormalRange {
       'notes': notes,
       'category': category,
       'species': species,
+    };
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'parameter': parameter,
+      'unit': unit,
+      'min_value': minValue,
+      'max_value': maxValue,
+      'panic_low': panicLow,
+      'panic_high': panicHigh,
+      'note': notes,
+      'reference': reference,
+      'category': category,
+      'species': species,
+      'sex': sex,
+      'age_range': ageRange,
+      'description': description,
+      'image_url': imageUrl,
     };
   }
 }

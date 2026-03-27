@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:convert';
+import '../services/onesignal_service.dart';
+import '../services/secure_storage_service.dart';
+import '../config/app_config.dart';
 
 class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? _user;
@@ -11,8 +14,17 @@ class AuthProvider with ChangeNotifier {
   String? _token;
   String? _refreshToken;
 
-  // Google Sign-In instance
+  // Secure storage instance
+  final _secureStorage = SecureStorageService();
+
+  // Google Sign-In instance - configured from AppConfig
   final GoogleSignIn _googleSignIn = GoogleSignIn(
+    // iOS Client ID (for iOS authentication)
+    clientId: AppConfig.googleClientIdIOS,
+    
+    // Web Application Client ID (required for Android backend authentication)
+    serverClientId: AppConfig.googleServerClientId,
+    
     scopes: ['email', 'profile'],
   );
 
@@ -22,8 +34,8 @@ class AuthProvider with ChangeNotifier {
   String? get token => _token;
   GoogleSignIn get googleSignIn => _googleSignIn;
 
-  // API Base URL
-  static const String baseUrl = 'https://python-database-production.up.railway.app';
+  // API Base URL from config
+  static String get baseUrl => AppConfig.apiBaseUrl;
 
   AuthProvider() {
     _checkSignInStatus();
@@ -35,17 +47,18 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Get tokens from secure storage
+      final token = await _secureStorage.getToken();
+      final refreshToken = await _secureStorage.getRefreshToken();
+      
+      // Load cached user data from SharedPreferences (non-sensitive data)
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      final refreshToken = prefs.getString('refreshToken');
-      // Load cached user data (including photo URL) if available so UI can display it immediately
       final cachedUserJson = prefs.getString('userData');
       if (cachedUserJson != null) {
         try {
           _user = jsonDecode(cachedUserJson);
         } catch (e) {
           // If decoding fails, clear corrupted data
-          print('Warning: Failed to decode cached userData: $e');
           await prefs.remove('userData');
         }
       }
@@ -54,30 +67,58 @@ class AuthProvider with ChangeNotifier {
         _token = token;
         _refreshToken = refreshToken; // Can be null
         
-        // Try to get current user info
-        final success = await _getCurrentUser();
-        if (success) {
+        // If we have cached user data, trust the token and stay signed in
+        if (_user != null) {
           _isSignedIn = true;
+          
+          // Try to get current user info in background
+          // Note: _getCurrentUser() now handles 401 errors by auto-logging out
+          _getCurrentUser().then((success) {
+            if (!success && _isSignedIn) {
+              // Only try refresh if still signed in (not logged out by 401)
+
+              // Try to refresh token in background if available
+              if (_refreshToken != null) {
+                _refreshAccessToken().then((refreshSuccess) {
+                  if (refreshSuccess && _isSignedIn) {
+                    _getCurrentUser();
+                  }
+                  // Don't logout on refresh failure - keep cached session
+                });
+              }
+            }
+          });
         } else {
-          // Try to refresh token only if refresh token exists
-          if (_refreshToken != null) {
-            final refreshSuccess = await _refreshAccessToken();
-            if (refreshSuccess) {
-              _isSignedIn = true;
-              await _getCurrentUser();
+          // No cached user data, must validate token
+          final success = await _getCurrentUser();
+          if (success) {
+            _isSignedIn = true;
+          } else {
+            // Try to refresh token only if refresh token exists
+            if (_refreshToken != null) {
+              final refreshSuccess = await _refreshAccessToken();
+              if (refreshSuccess) {
+                _isSignedIn = true;
+                await _getCurrentUser();
+              } else {
+                // Clear invalid tokens
+                await _clearTokens();
+              }
             } else {
-              // Clear invalid tokens
+              // No refresh token, clear tokens
               await _clearTokens();
             }
-          } else {
-            // No refresh token, clear tokens
-            await _clearTokens();
           }
         }
       }
     } catch (e) {
-      print('Error checking sign in status: $e');
+      _isSignedIn = false;
       await _clearTokens();
+    }
+
+    // Set OneSignal user identification if user is signed in
+    if (_isSignedIn && _user != null) {
+      _setOneSignalUserData(); // Don't await here to speed up app launch
     }
 
     _isLoading = false;
@@ -96,12 +137,13 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print('Attempting to register user: $email');
+
       
-      // Prepare request body with required username field
+      // Prepare request body
+      // Use the actually entered name as username instead of deriving from email
       final requestBody = {
         'name': name,
-        'username': email.split('@')[0], // Generate username from email
+        'username': email.split('@')[0],
         'email': email,
         'password': password,
         'password_confirmation': passwordConfirmation,
@@ -109,36 +151,45 @@ class AuthProvider with ChangeNotifier {
         if (photoUrl != null) 'avatar': photoUrl,
       };
       
-      print('Sending registration request to: $baseUrl/api/auth/register');
-      print('Request body: $requestBody');
+
 
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/register'), // Registration endpoint
+        Uri.parse('$baseUrl/api/auth/register'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
         body: jsonEncode(requestBody),
-      );
+      ).timeout(const Duration(seconds: 15));
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+
 
       // Try to parse response
       Map<String, dynamic> data;
       try {
         data = jsonDecode(response.body) as Map<String, dynamic>;
       } catch (e) {
-        print('Failed to parse response: $e');
+
         throw Exception('Invalid server response format');
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print('Registration successful, attempting to login...');
-        // Registration successful, now login
+
+        // Registration successful, now login using the username the API returned (or fallback)
+        String usernameFromApi = '';
+        try {
+          usernameFromApi = (data['username'] ?? '') as String;
+        } catch (_) {}
+
+        final username = usernameFromApi.isNotEmpty
+            ? usernameFromApi
+            : (name.isNotEmpty
+                ? name
+                : (email.contains('@') ? email.split('@')[0] : email));
+
         _isLoading = false;
         notifyListeners();
-        return await login(email: email, password: password);
+        return await _loginWithUsername(username: username, password: password);
       } else {
         String errorMessage = 'Registration failed';
         if (data['message'] != null) {
@@ -147,25 +198,27 @@ class AuthProvider with ChangeNotifier {
           errorMessage = data['error'].toString();
         }
         
-        print('Registration failed: $errorMessage');
+
         _isLoading = false;
         notifyListeners();
         return {
           'success': false,
           'message': errorMessage,
-          'errors': data['errors'] ?? {},
+          'errors': (data['errors'] is Map)
+              ? Map<String, dynamic>.from(data['errors'])
+              : <String, dynamic>{},
         };
       }
     } catch (e, stackTrace) {
-      print('Error during registration:');
-      print(e);
-      print(stackTrace);
-      
+      if (kDebugMode) {
+        debugPrint('Error during registration: $e');
+        debugPrint(stackTrace.toString());
+      }
       _isLoading = false;
       notifyListeners();
       return {
         'success': false,
-        'message': 'Error during registration: ${e.toString()}',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
@@ -179,9 +232,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print('Attempting to login user: $email');
-      // For login, we'll use the part before @ as username
-      final username = email.split('@')[0];
+
       
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/login'),
@@ -191,54 +242,57 @@ class AuthProvider with ChangeNotifier {
         },
         body: jsonEncode({
           'email': email,
-          'username': username,  // Add username field
           'password': password,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
-      print('Login response status: ${response.statusCode}');
-      print('Login response body: ${response.body}');
 
-      final data = jsonDecode(response.body);
+
+      Map<String, dynamic> data = {};
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) data = Map<String, dynamic>.from(decoded);
+      } catch (_) {}
 
       if (response.statusCode == 200) {
         _token = data['access'] ?? data['access_token'];  // Support both formats
         _refreshToken = data['refresh'] ?? data['refresh_token'];  // Support both formats
         _isSignedIn = true;
 
-        print('Login successful, token received');
-        print('Access token: ${_token?.substring(0, 10)}...');
-        print('Refresh token: ${_refreshToken?.substring(0, 10)}...');
-        
+
         // Get user information using the token
-        print('Attempting to get user info from API...');
-        final userInfoSuccess = await _getCurrentUser();
-        
-        if (!userInfoSuccess) {
-          print('API user info failed, using fallback data');
-          // If we can't get user info, create a basic user object with email
-          _user = {
-            'email': email,
-            'name': email.split('@')[0], // Use part before @ as name
-            'username': email.split('@')[0],
-          };
+
+
+        // OPTIMIZATION: Check if user data is already in the response to avoid extra API call
+        if (data.containsKey('user') && data['user'] != null) {
+          _user = data['user'];
+          // Ensure we have minimal required fields
+          if (_user!['email'] == null) _user!['email'] = email;
+        } else {
+          // Only fetch if not provided in login response
+          final userInfoSuccess = await _getCurrentUser();
+          
+          if (!userInfoSuccess) {
+            // If we can't get user info, create a basic user object with email
+            _user = {
+              'email': email,
+              'name': email.split('@')[0], // Use part before @ as name
+              'username': email.split('@')[0],
+            };
+          }
         }
         
-        print('Final user info: $_user');
+
         
-        // Ensure user data is saved
+        // Save tokens securely
+        await _saveTokens();
+        
+        // Save user data to SharedPreferences (non-sensitive)
         if (_user != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('userData', jsonEncode(_user));
+          _setOneSignalUserData(); // Sync OneSignal in background
         }
-
-        // Save tokens to SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', _token!);
-        if (_refreshToken != null) {
-          await prefs.setString('refreshToken', _refreshToken!);
-        }
-        await prefs.setString('userData', jsonEncode(_user));
 
         _isLoading = false;
         notifyListeners();
@@ -248,12 +302,92 @@ class AuthProvider with ChangeNotifier {
           'user': _user,
         };
       } else {
+        // Handle inactive user account (403 Forbidden)
+        if (response.statusCode == 403) {
+          _isLoading = false;
+          notifyListeners();
+          return {
+            'success': false,
+            'message': data['detail'] ?? 'هەژمارەکەت راگیراوە',
+          };
+        }
+        
+        // If backend requires username (422 with detail missing username), retry with username
+        final needsUsername = response.statusCode == 422 &&
+            ((data['detail'] is List &&
+                (data['detail'] as List).any((e) =>
+                    (e is Map) &&
+                    (e['loc'] is List) &&
+                    (e['loc'] as List).contains('username'))));
+
+        if (needsUsername) {
+          // Try username as email local-part first, then as full email
+          final usernameCandidates = <String>[
+            if (email.contains('@')) email.split('@')[0],
+            email,
+          ];
+
+          for (final u in usernameCandidates) {
+            try {
+              final r2 = await http.post(
+                Uri.parse('$baseUrl/api/auth/login'),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                },
+                body: jsonEncode({
+                  'username': u,
+                  'password': password,
+                }),
+              );
+
+              Map<String, dynamic> d2 = {};
+              try {
+                final dec2 = jsonDecode(r2.body);
+                if (dec2 is Map) d2 = Map<String, dynamic>.from(dec2);
+              } catch (_) {}
+
+
+
+              if (r2.statusCode == 200) {
+                _token = d2['access'] ?? d2['access_token'];
+                _refreshToken = d2['refresh'] ?? d2['refresh_token'];
+                _isSignedIn = true;
+
+                // Fetch user info (ignore failure)
+                await _getCurrentUser();
+
+                // Save tokens securely
+                await _saveTokens();
+                
+                // Save user data to SharedPreferences (non-sensitive)
+                if (_user != null) {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('userData', jsonEncode(_user));
+                }
+
+                _isLoading = false;
+                notifyListeners();
+                return {
+                  'success': true,
+                  'message': 'Login successful',
+                  'user': _user,
+                };
+              }
+            } catch (_) {
+              // continue to next candidate
+            }
+          }
+        }
+
         _isLoading = false;
         notifyListeners();
         return {
           'success': false,
           'message': data['message'] ?? 'Login failed',
-          'errors': data['errors'] ?? {},
+          'errors': (data['errors'] is Map)
+              ? Map<String, dynamic>.from(data['errors'])
+              : <String, dynamic>{},
         };
       }
     } catch (e) {
@@ -261,7 +395,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return {
         'success': false,
-        'message': 'Network error: $e',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
@@ -275,8 +409,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print('Attempting to login with username: $username');
-      
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/login'),
         headers: {
@@ -287,10 +420,9 @@ class AuthProvider with ChangeNotifier {
           'username': username,
           'password': password,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
-      print('Login response status: ${response.statusCode}');
-      print('Login response body: ${response.body}');
+
 
       final data = jsonDecode(response.body);
 
@@ -299,38 +431,37 @@ class AuthProvider with ChangeNotifier {
         _refreshToken = data['refresh'] ?? data['refresh_token'];  // Support both formats
         _isSignedIn = true;
 
-        print('Login successful, token received');
-        print('Access token: ${_token?.substring(0, 10)}...');
-        print('Refresh token: ${_refreshToken?.substring(0, 10)}...');
-        
+
         // Get user information using the token
-        print('Attempting to get user info from API...');
-        final userInfoSuccess = await _getCurrentUser();
-        
-        if (!userInfoSuccess) {
-          print('API user info failed, using fallback data');
-          // If we can't get user info, create a basic user object with username
-          _user = {
-            'username': username,
-            'name': username,
-          };
+
+
+        // OPTIMIZATION: Check if user data is already in the response to avoid extra API call
+        if (data.containsKey('user') && data['user'] != null) {
+          _user = data['user'];
+          if (_user!['username'] == null) _user!['username'] = username;
+        } else {
+          // Only fetch if not provided in login response
+          final userInfoSuccess = await _getCurrentUser();
+          
+          if (!userInfoSuccess) {
+            // If we can't get user info, create a basic user object with username
+            _user = {
+              'username': username,
+              'name': username,
+            };
+          }
         }
+
         
-        print('Final user info: $_user');
+        // Save tokens securely
+        await _saveTokens();
         
-        // Ensure user data is saved
+        // Save user data to SharedPreferences (non-sensitive)
         if (_user != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('userData', jsonEncode(_user));
+          _setOneSignalUserData(); // Sync OneSignal in background
         }
-
-        // Save tokens to SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', _token!);
-        if (_refreshToken != null) {
-          await prefs.setString('refreshToken', _refreshToken!);
-        }
-        await prefs.setString('userData', jsonEncode(_user));
 
         _isLoading = false;
         notifyListeners();
@@ -340,6 +471,16 @@ class AuthProvider with ChangeNotifier {
           'user': _user,
         };
       } else {
+        // Handle inactive user account (403 Forbidden)
+        if (response.statusCode == 403) {
+          _isLoading = false;
+          notifyListeners();
+          return {
+            'success': false,
+            'message': data['detail'] ?? 'هەژمارەکەت راگیراوە',
+          };
+        }
+        
         _isLoading = false;
         notifyListeners();
         return {
@@ -353,20 +494,21 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return {
         'success': false,
-        'message': 'Network error: $e',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
 
+  // Get current user info (public method)
+  Future<bool> getCurrentUser() async {
+    return await _getCurrentUser();
+  }
+
   // Get current user info
   Future<bool> _getCurrentUser() async {
-    if (_token == null) {
-      print('No token available for user info request');
-      return false;
-    }
+    if (_token == null) return false;
 
     try {
-      print('Making request to $baseUrl/api/auth/me');
       final response = await http.get(
         Uri.parse('$baseUrl/api/auth/me'),
         headers: {
@@ -374,10 +516,7 @@ class AuthProvider with ChangeNotifier {
           'Accept': 'application/json',
           'Authorization': 'Bearer $_token',
         },
-      );
-
-      print('User info response status: ${response.statusCode}');
-      print('User info response body: ${response.body}');
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -388,18 +527,24 @@ class AuthProvider with ChangeNotifier {
           newUser['photo_url'] = newUser['photo_url'] ?? _user!['photo_url'];
         }
         _user = newUser;
-        print('User data from API (merged): $_user');
         
         // Save user data
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('userData', jsonEncode(_user));
+        _setOneSignalUserData(); // Sync OneSignal in background
         
         return true;
-      } else {
-        print('Failed to get user info, status: ${response.statusCode}');
+      } else if (response.statusCode == 401) {
+        // 401 means invalid credentials - account deleted or token revoked
+        // Clear all data and logout
+        await _clearTokens();
+        _user = null;
+        _isSignedIn = false;
+        notifyListeners();
+        return false;
       }
     } catch (e) {
-      print('Error getting current user: $e');
+      // Silent error handling
     }
     return false;
   }
@@ -414,8 +559,8 @@ class AuthProvider with ChangeNotifier {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization': 'Bearer $_refreshToken',
         },
+        body: jsonEncode({'refresh_token': _refreshToken}),
       );
 
       if (response.statusCode == 200) {
@@ -425,17 +570,22 @@ class AuthProvider with ChangeNotifier {
           _refreshToken = data['refresh_token'];
         }
 
-        // Save new tokens
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', _token!);
-        if (_refreshToken != null) {
-          await prefs.setString('refreshToken', _refreshToken!);
-        }
+        // Save new tokens securely
+        await _saveTokens();
 
         return true;
+      } else if (response.statusCode == 403) {
+        // Account has been deactivated - force logout
+        await _clearTokens();
+        _user = null;
+        _isSignedIn = false;
+        notifyListeners();
+        return false;
       }
     } catch (e) {
-      print('Error refreshing token: $e');
+      if (kDebugMode) {
+        debugPrint('Error refreshing token: $e');
+      }
     }
     return false;
   }
@@ -446,8 +596,8 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_token != null) {
-        // Call logout API
+      if (_token != null && _refreshToken != null) {
+        // Call logout API - must send refresh_token in body for backend to revoke it
         await http.post(
           Uri.parse('$baseUrl/api/auth/logout'),
           headers: {
@@ -455,18 +605,22 @@ class AuthProvider with ChangeNotifier {
             'Accept': 'application/json',
             'Authorization': 'Bearer $_token',
           },
+          body: jsonEncode({'refresh_token': _refreshToken}),
         );
       }
     } catch (e) {
-      print('Error during logout API call: $e');
+      if (kDebugMode) {
+        debugPrint('Error during sign out: $e');
+      }
     }
 
     // Sign out from Google as well
     try {
       await _googleSignIn.signOut();
-      print('✅ Signed out from Google');
     } catch (e) {
-      print('Warning: Could not sign out from Google: $e');
+      if (kDebugMode) {
+        debugPrint('Error signing out from Google: $e');
+      }
     }
     
     // Clear local data regardless of API call result
@@ -478,15 +632,42 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Save tokens securely
+  Future<void> _saveTokens() async {
+    if (_token != null) {
+      await _secureStorage.saveToken(_token!);
+    }
+    if (_refreshToken != null) {
+      await _secureStorage.saveRefreshToken(_refreshToken!);
+    }
+  }
+
   // Clear tokens and user data
   Future<void> _clearTokens() async {
     _token = null;
     _refreshToken = null;
     
+    // Clear secure storage
+    await _secureStorage.clearAll();
+    
+    // Clear non-sensitive data from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    await prefs.remove('refreshToken');
     await prefs.remove('userData');
+    
+    // Clear all cached data that might be user-specific
+    // This prevents showing old user's data to new users
+    final keysToRemove = [
+      'about_text',
+      'about_text_hash',
+      'about_ceos',
+      'about_ceos_hash',
+      'about_supporters',
+      'about_supporters_hash',
+    ];
+    
+    for (final key in keysToRemove) {
+      await prefs.remove(key);
+    }
   }
 
   // Get user display name
@@ -521,16 +702,10 @@ class AuthProvider with ChangeNotifier {
     required String googleToken,
     String? photoUrl,
   }) async {
-    print('\n🔄 === STARTING GOOGLE LOGIN/REGISTRATION PROCESS ===');
-    print('📧 Email: $email');
-    print('👤 Name: $name');
-    print('🆔 Google ID: $googleId');
-    print('🖼️ Photo URL: $photoUrl');
-    print('🌐 Base URL: $baseUrl');
-    print('================================================\n');
+
 
     // STEP 1: Try Google-specific login endpoint first (for existing Google users)
-  print('🔑 STEP 1: Attempting Google login endpoint...');
+
 
   final googleLoginResult = await _loginWithGoogleEndpoint(
     email: email,
@@ -541,12 +716,18 @@ class AuthProvider with ChangeNotifier {
   );
 
   if (googleLoginResult['success'] == true) {
-    print('✅ Logged in via Google endpoint!');
+
+    return googleLoginResult;
+  }
+  
+  // Check if account is deactivated
+  if (googleLoginResult['message'] != null && 
+      googleLoginResult['message'].toString().contains('هەژمارەکەت راگیراوە')) {
     return googleLoginResult;
   }
 
   // STEP 2: If Google login failed, try Google registration endpoint (for first-time Google users)
-  print('🟡 STEP 2: Attempting Google registration endpoint...');
+
   final googleRegisterResult = await _registerWithGoogleEndpoint(
     email: email,
     name: name,
@@ -556,107 +737,99 @@ class AuthProvider with ChangeNotifier {
   );
 
   if (googleRegisterResult['success'] == true) {
-    print('✅ Registered & logged in via Google endpoint!');
     return googleRegisterResult;
   }
 
-  // STEP 3: Try regular email/password login as fallback (handles legacy accounts created with Google ID as password)
-  print('🔄 STEP 3: Attempting regular login with email...');
-    print('🔑 STEP 1: Attempting regular login with email...');
-    
-    // First, let's try to login with email and googleId as password
-    // This handles users who registered via Google before
-    final regularLoginResult = await login(
-      email: email,
-      password: googleId, // Using Google ID as password for consistency
-    );
+  // STEP 3: Legacy Fallback - Try login with email and googleId as password
+  final regularLoginResult = await login(
+    email: email,
+    password: googleId,
+  );
 
-    if (regularLoginResult['success'] == true) {
-      print('✅ Logged in via regular login with Google ID as password!');
-      
-      // Update user photo if available
-      if (photoUrl != null && _user != null) {
-        _user!['photo_url'] = photoUrl;
-        _user!['avatar'] = photoUrl;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('userData', jsonEncode(_user));
-      }
-      
-      return {
-        'success': true,
-        'message': 'بەخێربێیت $name!',
-        'user': _user,
-      };
+  if (regularLoginResult['success'] == true) {
+    if (photoUrl != null && _user != null) {
+      _user!['photo_url'] = photoUrl;
+      _user!['avatar'] = photoUrl;
+      SharedPreferences.getInstance().then((prefs) => prefs.setString('userData', jsonEncode(_user)));
     }
-
-    // STEP 4: Try with just the base username (extract from name or email)
-    print('🔄 STEP 2: Trying login with username variations...');
-    final baseUsername = name.contains(' ') ? name.split(' ')[0] : name;
-    final usernameVariations = [
-      baseUsername,
-      baseUsername.toLowerCase(),
-      email.split('@')[0],
-      email.split('@')[0].toLowerCase(),
-      '${baseUsername}_google',
-      '${baseUsername.toLowerCase()}_google',
-    ];
-
-    for (String username in usernameVariations) {
-      try {
-        print('🔍 Trying username: $username');
-        final usernameLoginResult = await _loginWithUsername(
-          username: username,
-          password: googleId,
-        );
-
-        if (usernameLoginResult['success'] == true) {
-          print('✅ Logged in with username: $username');
-          
-          // Update user photo if available
-          if (photoUrl != null && _user != null) {
-            _user!['photo_url'] = photoUrl;
-            _user!['avatar'] = photoUrl;
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('userData', jsonEncode(_user));
-          }
-          
-          return {
-            'success': true,
-            'message': 'بەخێربێیت $name!',
-            'user': _user,
-          };
-        }
-      } catch (e) {
-        print('⚠️ Username login failed for $username: $e');
-        continue;
-      }
-    }
-
-    // STEP 3: All login attempts failed - do NOT try registration for signInWithGoogle
-    print('❌ All login attempts failed - account may not exist or wrong credentials');
     return {
-      'success': false,
-      'message': 'ئەکاونت نەدۆزرایەوە یان زانیارییەکان هەڵەن. تکایە هەژماری نوێ دروست بکە.',
-      'account_not_found': true,
-      'email': email,
-      'error_type': 'account_not_found',
+      'success': true,
+      'message': 'بەخێربێیت $name!',
+      'user': _user,
     };
   }
+  
+  // Check if account is deactivated
+  if (regularLoginResult['message'] != null && 
+      regularLoginResult['message'].toString().contains('هەژمارەکەت راگیراوە')) {
+    return regularLoginResult;
+  }
+
+  // STEP 4: Username Variations loop (Crucial for legacy users with custom usernames)
+  final normalizedFullName = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final firstName = normalizedFullName.contains(' ') ? normalizedFullName.split(' ')[0] : normalizedFullName;
+  final emailLocal = email.split('@')[0];
+  
+  final usernameVariations = [
+    emailLocal,
+    emailLocal.toLowerCase(),
+    firstName,
+    firstName.toLowerCase(),
+    normalizedFullName,
+    normalizedFullName.toLowerCase(),
+    normalizedFullName.replaceAll(' ', '.'),
+    '${firstName}_google',
+    '${emailLocal}_google',
+  ];
+
+  for (String username in usernameVariations) {
+    try {
+      final usernameLoginResult = await _loginWithUsername(
+        username: username,
+        password: googleId,
+      );
+
+      if (usernameLoginResult['success'] == true) {
+        if (photoUrl != null && _user != null) {
+          _user!['photo_url'] = photoUrl;
+          _user!['avatar'] = photoUrl;
+          SharedPreferences.getInstance().then((prefs) => prefs.setString('userData', jsonEncode(_user)));
+        }
+        return {
+          'success': true,
+          'message': 'بەخێربێیت $name!',
+          'user': _user,
+        };
+      }
+      
+      // Check if account is deactivated
+      if (usernameLoginResult['message'] != null && 
+          usernameLoginResult['message'].toString().contains('هەژمارەکەت راگیراوە')) {
+        return usernameLoginResult;
+      }
+    } catch (_) {}
+  }
+
+  // STEP 5: Final Failure
+  return {
+    'success': false,
+    'message': 'ئەکاونت نەدۆزرایەوە یان زانیارییەکان هەڵەن. تکایە هەژماری نوێ دروست بکە.',
+    'account_not_found': true,
+    'email': email,
+    'error_type': 'account_not_found',
+  };
+}
 
   // Updated signInWithGoogle method to handle the response better
   Future<Map<String, dynamic>> signInWithGoogle() async {
-    print('🚀🚀🚀 === GOOGLE SIGN-IN METHOD CALLED === 🚀🚀🚀');
-    print('📅 Timestamp: ${DateTime.now()}');
-    print('🔍 Checking GoogleSignIn instance: $_googleSignIn');
-    print('📱 Platform: Android');
+
     
     _isLoading = true;
     notifyListeners();
-    print('⚙️ Loading state set to true');
+
     
     try {
-      print('🟢 Starting Google Sign-In process...');
-      print('🔑 Calling _googleSignIn.signIn()...');
+
       
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
@@ -665,7 +838,7 @@ class AuthProvider with ChangeNotifier {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       
       if (googleUser == null) {
-        print('Google Sign-In was cancelled by user');
+
         _isLoading = false;
         notifyListeners();
         return {
@@ -674,13 +847,13 @@ class AuthProvider with ChangeNotifier {
         };
       }
 
-      print('Google user signed in: ${googleUser.email}');
+
       
       // Obtain the auth details from the request
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
       if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-        print('Failed to get Google access token');
+
         _isLoading = false;
         notifyListeners();
         return {
@@ -689,7 +862,7 @@ class AuthProvider with ChangeNotifier {
         };
       }
 
-      print('Google access token obtained');
+
       
       // Try to register/login with your backend using Google data
       final result = await _registerOrLoginWithGoogle(
@@ -706,12 +879,12 @@ class AuthProvider with ChangeNotifier {
       return result;
       
     } catch (error) {
-      print('Google Sign-In error: $error');
+      if (kDebugMode) debugPrint('Error in signInWithGoogle: $error');
       _isLoading = false;
       notifyListeners();
       return {
         'success': false,
-        'message': 'هەڵەیەک ڕووی دا: $error', // An error occurred
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
@@ -725,15 +898,19 @@ class AuthProvider with ChangeNotifier {
   }) async {
     try {
       // Try different username variations if the first one fails
-      final baseUsername = name.contains(' ') ? name.split(' ')[0] : name;
+      final normalizedName = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      final baseUsername = normalizedName; // Preserve spaces and case
       final emailUsername = email.split('@')[0];
       
       final usernameVariations = [
+        baseUsername,
+        emailUsername,
+        baseUsername.replaceAll(' ', ''),
         baseUsername.toLowerCase(),
         emailUsername.toLowerCase(),
-        '${baseUsername.toLowerCase()}_g',
-        '${emailUsername.toLowerCase()}_google',
-        '${baseUsername.toLowerCase()}_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+        baseUsername.replaceAll(' ', '.'), // legacy fallback
+        '${emailUsername}_google',
+        '${baseUsername}_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
       ];
       
       for (int i = 0; i < usernameVariations.length; i++) {
@@ -748,7 +925,7 @@ class AuthProvider with ChangeNotifier {
           if (photoUrl != null) 'avatar': photoUrl,
         };
         
-        print('🚀 Registration attempt ${i + 1}: username = $username');
+
         
         final registerResponse = await http.post(
           Uri.parse('$baseUrl/api/auth/register'),
@@ -759,18 +936,17 @@ class AuthProvider with ChangeNotifier {
           body: jsonEncode(requestBody),
         );
         
-        print('📡 Registration response status: ${registerResponse.statusCode}');
-        print('📄 Registration response body: ${registerResponse.body}');
+
         
         if (registerResponse.statusCode == 200 || registerResponse.statusCode == 201) {
-          print('✅ User successfully registered with username: $username');
+
           
           // Parse the registration response
           final regData = jsonDecode(registerResponse.body);
           
           // Check if registration response contains tokens (direct login)
           if (regData['access_token'] != null) {
-            print('✅ Registration response contains tokens - logging in directly');
+
             _token = regData['access_token'];
             _refreshToken = regData['refresh_token'];
             _user = regData['user'] ?? {
@@ -781,10 +957,11 @@ class AuthProvider with ChangeNotifier {
             };
             _isSignedIn = true;
 
-            // Persist tokens & user
+            // Save tokens securely
+            await _saveTokens();
+            
+            // Save user data to SharedPreferences (non-sensitive)
             final prefs = await SharedPreferences.getInstance();
-            if (_token != null) await prefs.setString('token', _token!);
-            if (_refreshToken != null) await prefs.setString('refreshToken', _refreshToken!);
             await prefs.setString('userData', jsonEncode(_user));
             
             return {
@@ -795,14 +972,14 @@ class AuthProvider with ChangeNotifier {
           }
           
           // If no tokens in registration response, login separately
-          print('🔑 Registration successful, now logging in...');
+
           final loginResult = await login(
             email: email,
             password: googleId,
           );
           
           if (loginResult['success'] == true) {
-            print('✅ Successfully logged in after registration');
+
             return {
               'success': true,
               'message': 'بەخێربێیت $name! هەژمارەکەت بە سەرکەوتوویی دروستکرا.',
@@ -834,7 +1011,7 @@ class AuthProvider with ChangeNotifier {
           
           // If it's an email already registered error, return immediately
           if (data['detail']?.toString().contains('Email already registered') == true) {
-            print('❌ Email already registered - stopping attempts');
+
             return {
               'success': false,
               'message': 'Registration failed',
@@ -847,12 +1024,12 @@ class AuthProvider with ChangeNotifier {
           // If username is already taken and we have more variations, try next
           if (data['detail']?.toString().contains('Username already registered') == true && 
               i < usernameVariations.length - 1) {
-            print('⚠️ Username "$username" already taken, trying next variation...');
+
             continue;
           }
           
           // If it's the last attempt or a different error, return the error
-          print('❌ Registration failed with status: ${registerResponse.statusCode}');
+
           return {
             'success': false,
             'message': data['message'] ?? data['detail'] ?? 'Registration failed',
@@ -871,10 +1048,10 @@ class AuthProvider with ChangeNotifier {
       };
       
     } catch (e) {
-      print('❌ Exception in regular endpoint registration: $e');
+
       return {
         'success': false,
-        'message': 'هەڵەیەک ڕووی دا لە سێرڤەر: $e',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
@@ -888,7 +1065,7 @@ class AuthProvider with ChangeNotifier {
     String? photoUrl,
   }) async {
     try {
-      print('🔑 Attempting Google login endpoint...');
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/google-login'),
         headers: {
@@ -902,10 +1079,9 @@ class AuthProvider with ChangeNotifier {
           'google_token': googleToken,
           'photo_url': photoUrl,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
-      print('Google login response status: ${response.statusCode}');
-      print('Google login response body: ${response.body}');
+
 
       final data = jsonDecode(response.body);
 
@@ -916,32 +1092,38 @@ class AuthProvider with ChangeNotifier {
         _user = data['user'];
         _isSignedIn = true;
 
-        // Save to SharedPreferences
+        // Save tokens securely
+        await _saveTokens();
+        
+        // Save user data to SharedPreferences (non-sensitive)
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', _token!);
-        if (_refreshToken != null) {
-          await prefs.setString('refreshToken', _refreshToken!);
-        }
         await prefs.setString('userData', jsonEncode(_user));
+        _setOneSignalUserData(); // Sync OneSignal in background
 
-        print('✅ Google login successful!');
+
         return {
           'success': true,
           'message': 'بەخێربێیت ${_user!['name']}!',
           'user': _user,
         };
+      } else if (response.statusCode == 403) {
+        // Handle inactive user account
+        return {
+          'success': false,
+          'message': data['detail'] ?? 'هەژمارەکەت راگیراوە',
+        };
       } else {
-        print('❌ Google login failed: ${data['message']}');
+
         return {
           'success': false,
           'message': data['message'] ?? 'Google login failed',
         };
       }
     } catch (e) {
-      print('❌ Exception in Google login endpoint: $e');
+
       return {
         'success': false,
-        'message': 'هەڵەیەک ڕووی دا لە سێرڤەر: $e',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
@@ -955,13 +1137,11 @@ class AuthProvider with ChangeNotifier {
     String? photoUrl,
   }) async {
     try {
-      print('🆕 Attempting Google registration endpoint...');
+
       
-      // Generate username from name or email
-      String username = name.contains(' ') ? name.split(' ')[0] : name;
-      if (username.isEmpty) {
-        username = email.split('@')[0];
-      }
+      // Try to register with the full name as the username (preserve spaces and case)
+      final normalizedName = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      String username = normalizedName;
       
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/google-register'),
@@ -977,10 +1157,9 @@ class AuthProvider with ChangeNotifier {
           'google_token': googleToken,
           'photo_url': photoUrl,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
-      print('Google registration response status: ${response.statusCode}');
-      print('Google registration response body: ${response.body}');
+
 
       final data = jsonDecode(response.body);
 
@@ -993,15 +1172,15 @@ class AuthProvider with ChangeNotifier {
             _user = data['user'];
             _isSignedIn = true;
 
-            // Save to SharedPreferences
+            // Save tokens securely
+            await _saveTokens();
+            
+            // Save user data to SharedPreferences (non-sensitive)
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('token', _token!);
-            if (_refreshToken != null) {
-              await prefs.setString('refreshToken', _refreshToken!);
-            }
             await prefs.setString('userData', jsonEncode(_user));
+            _setOneSignalUserData(); // Sync OneSignal in background
 
-            print('✅ Google registration successful with auto-login!');
+
             return {
               'success': true,
               'message': 'بەخێربێیت ${_user!['name']}!',
@@ -1009,7 +1188,7 @@ class AuthProvider with ChangeNotifier {
             };
           } else {
             // Registration successful but need to login
-            print('✅ Google registration successful, now logging in...');
+
             return await _loginWithGoogleEndpoint(
               email: email,
               name: name,
@@ -1021,34 +1200,30 @@ class AuthProvider with ChangeNotifier {
         }
       }
       
-      print('❌ Google registration failed: ${data['message']}');
+
       return {
         'success': false,
         'message': data['message'] ?? 'Google registration failed',
       };
     } catch (e) {
-      print('❌ Exception in Google registration endpoint: $e');
+
       return {
         'success': false,
-        'message': 'هەڵەیەک ڕووی دا لە سێرڤەر: $e',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
 
   // Google Sign-Up method - Forces registration first (for registration mode)
   Future<Map<String, dynamic>> signUpWithGoogle() async {
-    print('🚀🚀🚀 === GOOGLE SIGN-UP METHOD CALLED === 🚀🚀🚀');
-    print('📅 Timestamp: ${DateTime.now()}');
-    print('🔍 Checking GoogleSignIn instance: $_googleSignIn');
-    print('📱 Platform: Android');
+
     
     _isLoading = true;
     notifyListeners();
-    print('⚙️ Loading state set to true');
+
     
     try {
-      print('🟢 Starting Google Sign-Up process...');
-      print('🔑 Calling _googleSignIn.signIn()...');
+
       
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
@@ -1057,7 +1232,7 @@ class AuthProvider with ChangeNotifier {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       
       if (googleUser == null) {
-        print('Google Sign-Up was cancelled by user');
+
         _isLoading = false;
         notifyListeners();
         return {
@@ -1066,13 +1241,13 @@ class AuthProvider with ChangeNotifier {
         };
       }
 
-      print('Google user signed up: ${googleUser.email}');
+
       
       // Obtain the auth details from the request
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
       if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-        print('Failed to get Google access token');
+
         _isLoading = false;
         notifyListeners();
         return {
@@ -1081,7 +1256,7 @@ class AuthProvider with ChangeNotifier {
         };
       }
 
-      print('Google access token obtained for sign-up');
+
       
       // Try to register first (this is the key difference from signInWithGoogle)
       final result = await _registerWithRegularEndpoint(
@@ -1108,7 +1283,7 @@ class AuthProvider with ChangeNotifier {
           errorDetail.contains('تۆمارکراوە') ||
           errorMessage.contains('تۆمارکراوە')) {
         
-        print('⚠️ Email already exists during sign-up attempt');
+
         return {
           'success': false,
           'message': 'ئەم ئیمەیڵە پێشتر بە شێوەیەکی ئاسایی تۆمارکراوە. تکایە بە وشەی نهێنی خۆت بچۆ ژوورەوە.',
@@ -1126,12 +1301,12 @@ class AuthProvider with ChangeNotifier {
       };
       
     } catch (error) {
-      print('Google Sign-Up error: $error');
+      if (kDebugMode) debugPrint('Error in signUpWithGoogle: $error');
       _isLoading = false;
       notifyListeners();
       return {
         'success': false,
-        'message': 'هەڵەیەک ڕووی دا: $error', // An error occurred
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
     }
   }
@@ -1140,9 +1315,10 @@ class AuthProvider with ChangeNotifier {
   Future<void> signOutFromGoogle() async {
     try {
       await _googleSignIn.signOut();
-      print('Signed out from Google');
     } catch (e) {
-      print('Error signing out from Google: $e');
+      if (kDebugMode) {
+        debugPrint('Error signing out from Google: $e');
+      }
     }
   }
 
@@ -1159,7 +1335,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print('Attempting to delete account for user: ${_user?['email']}');
+
       
       final response = await http.delete(
         Uri.parse('$baseUrl/api/auth/delete-account'),
@@ -1170,18 +1346,19 @@ class AuthProvider with ChangeNotifier {
         },
       );
 
-      print('Delete account response status: ${response.statusCode}');
-      print('Delete account response body: ${response.body}');
+
 
       if (response.statusCode == 200 || response.statusCode == 204) {
         // Account successfully deleted
-        print('✅ Account deleted successfully');
+
         
         // Sign out from Google if applicable
         try {
           await _googleSignIn.signOut();
         } catch (e) {
-          print('Warning: Could not sign out from Google: $e');
+          if (kDebugMode) {
+            debugPrint('Error signing out from Google after account delete: $e');
+          }
         }
         
         // Clear all local data
@@ -1209,14 +1386,38 @@ class AuthProvider with ChangeNotifier {
         };
       }
     } catch (e) {
-      print('Error deleting account: $e');
+
       _isLoading = false;
       notifyListeners();
       
       return {
         'success': false,
-        'message': 'هەڵەیەک ڕووی دا: $e',
+        'message': 'تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە',
       };
+    }
+  }
+
+  // Set OneSignal user data for push notifications
+  Future<void> _setOneSignalUserData() async {
+    if (_user != null) {
+      try {
+        // Set external user ID for targeting
+        final userId = _user!['id']?.toString() ?? _user!['email']?.toString();
+        if (userId != null) {
+          await OneSignalService.setExternalUserId(userId);
+        }
+
+        // Set minimal OneSignal user tags to avoid tag limit
+        await OneSignalService.setUserTags({
+          'user_type': 'registered',
+        });
+        
+
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Error setting OneSignal user data: $e');
+        }
+      }
     }
   }
 }

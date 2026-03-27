@@ -27,7 +27,7 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
     // Add to history after frame is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<HistoryProvider>(context, listen: false)
-          .addTerminologyToHistory(widget.terminology.name, 'Viewed terminology details');
+          .addToHistory(widget.terminology.name, 'terminology', 'Viewed terminology details', data: widget.terminology);
     });
   }
 
@@ -47,9 +47,9 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: themeProvider.isDarkMode 
-                  ? themeProvider.theme.colorScheme.surface 
-                  : themeProvider.theme.colorScheme.primary.withOpacity(0.8),
-                borderRadius: BorderRadius.only(
+                  ? const Color(0xFF1E1E1E)
+                  : themeProvider.theme.colorScheme.primary.withValues(alpha: 0.8),
+                borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
                 ),
@@ -57,12 +57,12 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.only(top: 40, left: 16, right: 16),
+                    padding: const EdgeInsets.only(top: 40, left: 16, right: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.arrow_back,
+                          icon: const Icon(Icons.arrow_back,
                             color: Colors.white,
                           ),
                           onPressed: () => Navigator.pop(context),
@@ -70,14 +70,14 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                   Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     child: Directionality(
                       textDirection: languageProvider.textDirection,
                       child: Text(
                         widget.terminology.name,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -86,13 +86,13 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
                       ),
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                   // Terminology Image
                   if (widget.terminology.imageUrl.isNotEmpty)
                     Container(
                       width: 140,
                       height: 140,
-                      margin: EdgeInsets.only(top: 20, bottom: 16),
+                      margin: const EdgeInsets.only(top: 20, bottom: 16),
                       decoration: BoxDecoration(
                         color: themeProvider.isDarkMode 
                           ? Colors.grey[800] 
@@ -102,9 +102,9 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
                           ? null 
                           : [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 15,
-                                offset: Offset(0, 5),
+                                offset: const Offset(0, 5),
                               ),
                             ],
                       ),
@@ -127,12 +127,12 @@ class _TerminologyDetailsPageState extends State<TerminologyDetailsPage> {
                     ),
                   // Action buttons
                   Container(
-                    margin: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: themeProvider.isDarkMode 
-                        ? Colors.grey[800]?.withOpacity(0.5) 
-                        : Colors.white.withOpacity(0.15),
+                        ? const Color(0xFF2C2C2C)
+                        : Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -147,7 +147,7 @@ ${widget.terminology.arabic}
 ${widget.terminology.description}''';
                             Clipboard.setData(ClipboardData(text: content.trim()));
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Copied to clipboard')),
+                              const SnackBar(content: Text('Copied to clipboard')),
                             );
                           },
                           label: 'کۆپی',
@@ -191,14 +191,14 @@ ${widget.terminology.description}''';
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
             
             // Content sections
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   if (widget.terminology.kurdish.isNotEmpty) ...[
@@ -206,12 +206,12 @@ ${widget.terminology.description}''';
                       'کوردی',
                       widget.terminology.kurdish,
                       Icons.translate,
-                      themeProvider.isDarkMode 
-                        ? Colors.blue.shade300 
-                        : Colors.blue.shade700,
+                      themeProvider.isDarkMode
+                        ? const Color(0xFF4A7EB5)
+                        : const Color(0xFF1A3460),
                       themeProvider,
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                   ],
                   if (widget.terminology.arabic.isNotEmpty) ...[
                     _buildInfoSection(
@@ -223,7 +223,7 @@ ${widget.terminology.description}''';
                         : Colors.orange.shade700,
                       themeProvider,
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                   ],
                   if (widget.terminology.description.isNotEmpty)
                     _buildInfoSection(
@@ -254,7 +254,7 @@ ${widget.terminology.description}''';
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -265,7 +265,7 @@ ${widget.terminology.description}''';
                 : Colors.white, 
               size: 24
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
@@ -293,67 +293,71 @@ ${widget.terminology.description}''';
     
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: themeProvider.isDarkMode 
-          ? Color(0xFF1E1E1E) 
+          ? const Color(0xFF1E1E1E) 
           : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: themeProvider.isDarkMode 
           ? null 
           : [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
       ),
       child: Column(
         crossAxisAlignment: languageProvider.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
+          // Section title
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: themeProvider.isDarkMode 
+                    ? Colors.white 
+                    : Colors.black87,
+                  height: 1.4,
+                  fontFamily: 'Inter',
                 ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.isDarkMode 
-                        ? Colors.white 
-                        : color,
-                    ),
-                  ),
-                ),
-              ],
+                textAlign: TextAlign.right,
+              ),
             ),
           ),
-          SizedBox(height: 16),
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: Text(
-              content,
-              textDirection: languageProvider.textDirection,
-              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-              style: TextStyle(
-                fontSize: 16,
-                color: themeProvider.isDarkMode 
-                  ? Colors.grey[400] 
-                  : Colors.black87,
-                height: 1.6,
+          const SizedBox(height: 8),
+          // Separator line under title
+          Container(
+            width: double.infinity,
+            height: 1,
+            color: themeProvider.isDarkMode 
+              ? Colors.grey[600] 
+              : Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          // Section content
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                content,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: themeProvider.isDarkMode 
+                    ? Colors.grey[300] 
+                    : Colors.black87,
+                  height: 1.6,
+                  fontFamily: 'Inter',
+                ),
+                textAlign: TextAlign.right,
               ),
             ),
           ),

@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart'; // Import url_launcher
+import 'dart:io' show Platform; // Import Platform
+import 'dart:async';
+import 'utils/constants.dart'; // Import constants
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/notification_provider.dart';
@@ -17,6 +23,7 @@ import '../providers/history_provider.dart';
 import 'pages/favorites_page.dart';
 import 'pages/history_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/login_page.dart';
 
 import 'pages/drugs.dart';
 import 'pages/diseases.dart';
@@ -27,22 +34,42 @@ import 'pages/terminology_details_page.dart';
 import 'pages/books.dart';
 import 'pages/instruments_page.dart';
 import 'pages/normal_ranges_page.dart';
-import 'pages/slides.dart';
+import 'widgets/notification_dialog.dart';
 import 'pages/notes_page.dart';
+import 'pages/note_details_page.dart';
 import 'pages/about_page.dart';
 import 'pages/introduction_page.dart';
-import 'utils/page_transition.dart';
+import 'pages/tests_page.dart';
+import 'pages/slides.dart';
+
+import 'package:vetstan/utils/page_transition.dart';
+import 'services/update_service.dart';
+import 'widgets/update_dialog.dart';
+
+import 'package:share_plus/share_plus.dart';
+
+// OneSignal
+import 'services/onesignal_service.dart';
+import 'services/first_launch_service.dart';
+import 'services/notification_permission_service.dart';
+
 import 'models/drug.dart';
 import 'models/disease.dart';
 import 'models/word.dart';
+import 'models/normal_range.dart';
+import 'models/note.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'services/sync_service.dart';
+import 'services/cache_service.dart';
+import 'services/api_service.dart'; // Add ApiService import
+import 'pages/quiz_page.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
-  // Ensure Flutter is initialized
-  WidgetsFlutterBinding.ensureInitialized();
+  // Preserve the splash screen until initialization is complete
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // Lock screen orientation to portrait only
   await SystemChrome.setPreferredOrientations([
@@ -53,8 +80,18 @@ void main() async {
   // Pre-load SharedPreferences instance to avoid multiple async calls later
   await SharedPreferences.getInstance();
 
+  // Initialize OneSignal
+  await OneSignalService.initialize();
+
+  // Pre-warm store-based update check (runs in background)
+  UpdateService.initialize();
+
   // Initialize providers
   final notificationProvider = NotificationProvider();
+  final bool seenIntro = await FirstLaunchService.hasSeenIntroduction();
+
+  // Remove the splash screen now that initialization is done
+  FlutterNativeSplash.remove();
 
   runApp(
     Phoenix(
@@ -68,14 +105,15 @@ void main() async {
           ChangeNotifierProvider(create: (_) => HistoryProvider()),
           ChangeNotifierProvider(create: (_) => AuthProvider()),
         ],
-        child: const MyApp(),
+        child: MyApp(seenIntro: seenIntro),
       ),
     ),
   );
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+  final bool seenIntro;
+  const MyApp({super.key, required this.seenIntro});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -86,6 +124,26 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _initializeCache();
+    // After first frame, wire OneSignal callbacks to refresh notifications list
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Foreground receipt: rely on local insert (onNotificationModel) to avoid race with backend persistence
+      OneSignalService.onForegroundNotification = () {};
+      OneSignalService.onNotificationOpened = () {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          Provider.of<NotificationProvider>(ctx, listen: false)
+              .fetchRecentNotifications();
+        }
+      };
+      // Insert incoming push immediately to UI
+      OneSignalService.onNotificationModel = (notification) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          Provider.of<NotificationProvider>(ctx, listen: false)
+              .addIncomingNotification(notification);
+        }
+      };
+    });
   }
 
   Future<void> _initializeCache() async {
@@ -93,7 +151,9 @@ class _MyAppState extends State<MyApp> {
       final SyncService syncService = SyncService();
       await syncService.initializeApp();
     } catch (e) {
-      print('Cache initialization error: $e');
+      if (kDebugMode) {
+        debugPrint('Cache initialization error: $e');
+      }
     }
   }
 
@@ -108,12 +168,13 @@ class _MyAppState extends State<MyApp> {
     );
 
     // Return the app content directly since providers are already created in main()
-    return const MyAppContent();
+    return MyAppContent(seenIntro: widget.seenIntro);
   }
 }
 
 class MyAppContent extends StatelessWidget {
-  const MyAppContent({Key? key}) : super(key: key);
+  final bool seenIntro;
+  const MyAppContent({super.key, required this.seenIntro});
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +183,8 @@ class MyAppContent extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'VET+',
+      title: 'VET DICT+',
+      navigatorKey: navigatorKey,
       locale: languageProvider.currentLocale,
       theme: themeProvider.theme.copyWith(
         splashColor: Colors.transparent,
@@ -150,7 +212,7 @@ class MyAppContent extends StatelessWidget {
         final fontSizeProvider = Provider.of<FontSizeProvider>(context);
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(
-            textScaleFactor: fontSizeProvider.fontSize,
+            textScaler: TextScaler.linear(fontSizeProvider.fontSize),
           ),
           child: Directionality(
             textDirection: TextDirection.ltr, // Keep LTR layout for UI elements
@@ -158,10 +220,18 @@ class MyAppContent extends StatelessWidget {
           ),
         );
       },
-      home: const HomePage(),
+      home: seenIntro ? const HomePage() : const IntroductionPage(),
+      routes: {
+        '/home': (context) => const HomePage(),
+        '/login': (context) => const LoginPage(),
+        '/profile': (context) => const ProfilePage(),
+        '/quiz': (context) => const QuizPage(),
+      },
     );
   }
 }
+
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -178,9 +248,11 @@ class _HomePageState extends State<HomePage> {
   OverlayEntry? _overlayEntry;
   final LayerLink _layerLink = LayerLink();
   String _selectedFilter = 'All'; // Add this line for filter state
+  bool _isDataLoading = true;
+  Timer? _apiSearchTimer; // Add _apiSearchTimer field
 
   int _selectedIndex = 2;
-  bool _showAllItems = false;
+  final bool _showAllItems = false;
 
   Widget _currentScreen() {
     switch (_selectedIndex) {
@@ -201,300 +273,404 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHomeContent() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
+    final contentPadding = isTablet ? 24.0 : 16.0;
+    final heroFontSize = isTablet ? 28.0 : 26.0;
+    final heroSubFontSize = isTablet ? 17.0 : 16.0;
+    final gridCrossAxisCount = isTablet ? 4 : 3;
+    final gridChildAspectRatio = isTablet ? 1.0 : 0.95;
+    final heroMinHeight = isTablet ? 160.0 : 180.0;
+
     return Column(
       children: [
-        // App Bar
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          decoration: BoxDecoration(
-            color: Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
+            // App Bar
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: contentPadding, vertical: isTablet ? 14.0 : 12.0),
+              decoration: BoxDecoration(
+                color: Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Consumer<NotificationProvider>(
-                builder: (context, notificationProvider, _) {
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary
-                              .withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.notifications_outlined),
-                          onPressed: () {
-                            // Mark notifications as read when icon is pressed
-                            notificationProvider.resetUnreadCount();
-                          },
-                          color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(),
-                          iconSize: 24,
-                        ),
-                      ),
-                      if (notificationProvider.unreadCount > 0)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Consumer<NotificationProvider>(
+                    builder: (context, notificationProvider, _) {
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
                             decoration: BoxDecoration(
-                              color: Provider.of<ThemeProvider>(context).theme.colorScheme.error,
+                              color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary
+                                  .withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: Text(
-                              notificationProvider.unreadCount > 9 ? '9+' : '${notificationProvider.unreadCount}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            child: IconButton(
+                              icon: const Icon(Icons.notifications_outlined),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => const NotificationDialog(),
+                                );
+                              },
+                              color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
+                              padding: EdgeInsets.all(isTablet ? 10 : 8),
+                              constraints: const BoxConstraints(),
+                              iconSize: isTablet ? 26 : 24,
                             ),
                           ),
-                        ),
-                    ],
-                  );
-                },
+                          if (notificationProvider.unreadCount > 0)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Provider.of<ThemeProvider>(context).theme.colorScheme.error,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  notificationProvider.unreadCount > 9 ? '9+' : '${notificationProvider.unreadCount}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  // Force LTR direction for app title to ensure '+' stays at the end
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      'VET DICT+',
+                      style: TextStyle(
+                        fontSize: isTablet ? 22 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: Provider.of<ThemeProvider>(context).isDarkMode
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary
+                          .withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.settings_outlined),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          createRoute(
+                            const SettingsPage(),
+                          ),
+                        );
+                      },
+                      color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
+                      padding: EdgeInsets.all(isTablet ? 10 : 8),
+                      constraints: const BoxConstraints(),
+                      iconSize: isTablet ? 26 : 24,
+                    ),
+                  ),
+                ],
               ),
-              // Force LTR direction for app title to ensure '+' stays at the end
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(
-                  'VET DICT+',  // or use languageProvider.translate('app_name')
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Provider.of<ThemeProvider>(context).isDarkMode
-                        ? Colors.white
-                        : const Color(0xFF1E293B),
+            ),
+
+            // ── TABLET: scrollable body, grid wraps tightly ──────────────────
+            if (isTablet)
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // Search Bar
+                      Padding(
+                        padding: EdgeInsets.all(contentPadding),
+                        child: _buildSearchBar(),
+                      ),
+                      // Hero Section
+                      _buildHeroSection(
+                        contentPadding: contentPadding,
+                        heroFontSize: heroFontSize,
+                        heroSubFontSize: heroSubFontSize,
+                        heroMinHeight: heroMinHeight,
+                        isTablet: true,
+                      ),
+                      // Feature Grid – shrinkWrapped, no Expanded
+                      Padding(
+                        padding: EdgeInsets.all(contentPadding),
+                        child: GridView.count(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: gridCrossAxisCount,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                          childAspectRatio: gridChildAspectRatio,
+                          children: [
+                            ..._buildFeatureItems(),
+                            if (!_showAllItems) _buildShowMoreItem(),
+                          ],
+                        ),
+                      ),
+                      // Action Buttons
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: contentPadding,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildActionItem('share.png', 'هاوبەشکردن', Colors.green, onTap: () {
+                              Share.share(
+                                'VET DICT+ - یەکێک لە باشترین فەرهەنگەکان بۆ خوێندکارانی پزیشکی ڤێتیرنەری.\n\n'
+                                'Android: ${AppConstants.androidStoreUrl}\n'
+                                'iOS: ${AppConstants.iosStoreUrl}');
+                            }),
+                            const SizedBox(width: 48),
+                            _buildActionItem('star.png', 'هەڵسەنگاندن', Colors.amber, onTap: () async {
+                              final url = Uri.parse(
+                                  Platform.isAndroid ? AppConstants.androidStoreUrl : AppConstants.iosStoreUrl);
+                              if (await canLaunchUrl(url)) {
+                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                              }
+                            }),
+                            const SizedBox(width: 48),
+                            _buildActionItem('about.png', 'دەربارە', const Color(0xFF4A7EB5), onTap: () {
+                              Navigator.push(context, createRoute(const AboutPage()));
+                            }),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   ),
                 ),
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary
-                      .withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.settings_outlined),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      createRoute(
-                        const SettingsPage(),
+
+            // ── PHONE: original non-scrollable layout with Expanded grid ─────
+            if (!isTablet) ...[
+              // Search Bar
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: _buildSearchBar(),
+              ),
+              // Hero Section
+              _buildHeroSection(
+                contentPadding: 16,
+                heroFontSize: 26,
+                heroSubFontSize: 16,
+                heroMinHeight: 180,
+                isTablet: false,
+              ),
+              // Feature Grid
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SizedBox(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      child: GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 0.95,
+                        children: [
+                          ..._buildFeatureItems(),
+                          if (!_showAllItems) _buildShowMoreItem(),
+                        ],
                       ),
                     );
                   },
-                  color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(),
-                  iconSize: 24,
+                ),
+              ),
+              // Action Buttons
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildActionItem('share.png', 'هاوبەشکردن', Colors.green, onTap: () {
+                      Share.share(
+                          'VET DICT+ - یەکێک لە باشترین فەرهەنگەکان بۆ خوێندکارانی پزیشکی ڤێتیرنەری.\n\n'
+                          'Android: ${AppConstants.androidStoreUrl}\n'
+                          'iOS: ${AppConstants.iosStoreUrl}');
+                    }),
+                    _buildActionItem('star.png', 'هەڵسەنگاندن', Colors.amber, onTap: () async {
+                      final url = Uri.parse(
+                          Platform.isAndroid ? AppConstants.androidStoreUrl : AppConstants.iosStoreUrl);
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      }
+                    }),
+                    _buildActionItem('about.png', 'دەربارە', const Color(0xFF4A7EB5), onTap: () {
+                      Navigator.push(context, createRoute(const AboutPage()));
+                    }),
+                  ],
                 ),
               ),
             ],
-          ),
+          ],
+    );
+  }
+
+  /// Shared hero banner widget used by both tablet and phone layouts.
+  Widget _buildHeroSection({
+    required double contentPadding,
+    required double heroFontSize,
+    required double heroSubFontSize,
+    required double heroMinHeight,
+    required bool isTablet,
+  }) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: contentPadding, vertical: isTablet ? 0 : 16),
+      constraints: BoxConstraints(minHeight: heroMinHeight),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: Provider.of<ThemeProvider>(context).isDarkMode
+              ? const [Color(0xFF1A3460), Color(0xFF1E2D4A)]
+              : [
+                  Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
+                  Provider.of<ThemeProvider>(context).theme.colorScheme.primary.withValues(alpha: 0.8),
+                ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        // Search Bar
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: _buildSearchBar(),
-        ),
-        // Hero Section
-        Container(
-          margin: const EdgeInsets.all(16),
-          constraints: BoxConstraints(
-            minHeight: 180,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Provider.of<ThemeProvider>(context).isDarkMode
+                ? const Color(0xFF1A3460).withValues(alpha: 0.5)
+                : Provider.of<ThemeProvider>(context).theme.colorScheme.primary.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-          width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
-                Provider.of<ThemeProvider>(context).theme.colorScheme.primary.withOpacity(0.8),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary
-                    .withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Container(
+              width: isTablet ? 180 : 150,
+              height: isTablet ? 180 : 150,
+              decoration: BoxDecoration(
+                color: Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
               ),
-            ],
+            ),
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                right: -20,
-                bottom: -20,
-                child: Container(
-                  width: 150,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor
-                        .withOpacity(0.1),
-                    shape: BoxShape.circle,
+          Padding(
+            padding: EdgeInsets.all(isTablet ? 28 : 24),
+            child: Column(
+              crossAxisAlignment: Provider.of<LanguageProvider>(context).isRTL
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Directionality(
+                  textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                  child: Text(
+                    'بەخێربێن بۆ +VET DICT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: heroFontSize,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                    ),
+                    textAlign: Provider.of<LanguageProvider>(context).isRTL ? TextAlign.right : TextAlign.left,
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: Provider.of<LanguageProvider>(context).isRTL 
-                      ? CrossAxisAlignment.end 
-                      : CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Directionality(textDirection: Provider.of<LanguageProvider>(context).textDirection,
-   
-                      child: Text(
-                        'بەخێربێن بۆ +VET DICT',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          height: 1.2,
-                        ),
-                        textAlign: Provider.of<LanguageProvider>(context).isRTL 
-                            ? TextAlign.right 
-                            : TextAlign.left,
-                      ),
+                const SizedBox(height: 8),
+                Directionality(
+                  textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                  child: Text(
+                    'یەکێک لە باشترین فەرهەنگەکان بۆ خوێندکارانی پزیشکی ڤێتیرنەری.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: heroSubFontSize,
+                      height: 1.3,
                     ),
-                    const SizedBox(height: 8),
-                    Directionality(textDirection: Provider.of<LanguageProvider>(context).textDirection,
-   
-                      child: Text(
-                        'یەکێک لە باشترین فەرهەنگەکان بۆ خوێندکارانی پزیشکی ڤێتیرنەری.',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 16,
-                          height: 1.3,
-                        ),
-                        textAlign: Provider.of<LanguageProvider>(context).isRTL 
-                            ? TextAlign.right 
-                            : TextAlign.left,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Provider.of<LanguageProvider>(context).isRTL 
-                          ? Alignment.centerRight 
-                          : Alignment.centerLeft,
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            createRoute(const IntroductionPage()),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor,
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 10,
-                              ),
-                            ],
-                          ),
-                          child: Directionality(
-                            textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                            child: Text(
-                              'دەستپێکردن',
-                              style: TextStyle(
-                                color: Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: Provider.of<LanguageProvider>(context).isRTL 
-                                  ? TextAlign.right 
-                                  : TextAlign.left,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    textAlign: Provider.of<LanguageProvider>(context).isRTL ? TextAlign.right : TextAlign.left,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        // Feature Grid
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return Container(
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.95,
-                  children: [
-                    ..._buildFeatureItems(),
-                    if (!_showAllItems) _buildShowMoreItem(),
-                  ],
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Provider.of<LanguageProvider>(context).isRTL
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(context, createRoute(const IntroductionPage()));
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 24 : 20,
+                        vertical: isTablet ? 12 : 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Provider.of<ThemeProvider>(context).isDarkMode
+                            ? Colors.white
+                            : Provider.of<ThemeProvider>(context).theme.scaffoldBackgroundColor,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Directionality(
+                        textDirection: Provider.of<LanguageProvider>(context).textDirection,
+                        child: Text(
+                          'دەستپێکردن',
+                          style: TextStyle(
+                            color: Provider.of<ThemeProvider>(context).isDarkMode
+                                ? const Color(0xFF1A3460)
+                                : Provider.of<ThemeProvider>(context).theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: isTablet ? 15 : 14,
+                          ),
+                          textAlign: Provider.of<LanguageProvider>(context).isRTL ? TextAlign.right : TextAlign.left,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
-        ),
-        // Action Buttons
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildActionItem(Icons.share,
-                  'هاوبەشکردن', Colors.green),
-              _buildActionItem(Icons.star_border,
-                  'هەڵسەنگاندن', Colors.amber),
-              _buildActionItem(Icons.info_outline,
-                  'دەربارە', Colors.blue,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      createRoute(const AboutPage()),
-                    );
-                  }),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   List<Widget> _buildFeatureItems() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
+
     final List<Map<String, dynamic>> allFeatures = [
       {
         'id': 'drugs',
         'icon': 'Drugs.png',
         'title': 'دەرمانەکان',
-        'color': const Color(0xFF2563EB)
+        'color': const Color(0xFF1A3460)
       },
       {
         'id': 'diseases',
@@ -551,12 +727,6 @@ class _HomePageState extends State<HomePage> {
         'color': const Color(0xFF10B981)
       },
       {
-        'id': 'endocrinology',
-        'icon': 'Endocrinology.png',
-        'title': 'endocrinology',
-        'color': const Color(0xFF6366F1)
-      },
-      {
         'id': 'biochemistry',
         'icon': 'Biochemistry.png',
         'title': 'biochemistry',
@@ -569,39 +739,15 @@ class _HomePageState extends State<HomePage> {
         'color': const Color(0xFF8B5CF6)
       },
       {
-        'id': 'autoimmunity',
-        'icon': 'Autoimmunity.png',
-        'title': 'autoimmunity',
-        'color': const Color(0xFFEC4899)
-      },
-      {
-        'id': 'genetics',
-        'icon': 'Genetics.png',
-        'title': 'genetics',
-        'color': const Color(0xFF14B8A6)
-      },
-      {
-        'id': 'drugs_alt',
-        'icon': 'pills_14705111.png',
-        'title': 'drugs',
-        'color': const Color(0xFF00B4A2)
-      },
-      {
-        'id': 'settings',
-        'icon': 'flask_8385644.png',
-        'title': 'ڕێکخستن',
-        'color': const Color(0xFF2563EB)
-      },
-      {
-        'id': 'books',
-        'icon': 'book_14705111.png',
-        'title': 'کتێبەکان',
-        'color': const Color(0xFF14B8A6)
+        'id': 'quiz',
+        'icon': 'quiz.png',
+        'title': 'تاقیکردنەوە',
+        'color': const Color(0xFF8B5CF6)
       },
     ];
 
-    // Determine how many items to show
-    final itemsToShow = _showAllItems ? allFeatures.length : 5;
+    // On tablet show one extra item before "more" to fill the 4-column row
+    final itemsToShow = _showAllItems ? allFeatures.length : (isTablet ? 7 : 5);
     final displayedFeatures = allFeatures.take(itemsToShow).toList();
 
     return displayedFeatures.map((feature) => _buildFeatureItem(
@@ -615,42 +761,52 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    print('HomePage initState called - fetching data...');
     _fetchAllData();
+    // Initialize notifications on app start
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      Provider.of<NotificationProvider>(context, listen: false)
+          .fetchRecentNotifications();
+      
+      // Show first-time notification permission prompt after UI settles
+      // This is Play Store compliant because we show rationale dialog BEFORE requesting permission
+      await Future.delayed(const Duration(milliseconds: 1500));
+      
+      if (!mounted) return;
+      
+      final shouldShow = await NotificationPermissionService.shouldShowFirstTimePrompt();
+      if (shouldShow && mounted) {
+        await NotificationPermissionService.showFirstTimePrompt(context);
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _apiSearchTimer?.cancel(); // Add _apiSearchTimer cancel
     _removeOverlay();
     super.dispose();
   }
 
   Future<void> _fetchAllData() async {
     try {
-      print('Starting to fetch data...');
-      final syncService = SyncService();
-      
-      // Ensure cache service is initialized first
-      await syncService.initializeApp();
-      
-      // Load data using sync service (handles both cached and API data)
-      final drugsData = await syncService.loadCategoryData<Drug>('drugs');
-      final diseasesData = await syncService.loadCategoryData<Disease>('diseases');
-      final termsData = await syncService.loadCategoryData<Word>('dictionary');
-      
-      print('Raw data loaded:');
-      print('- Drugs: ${drugsData.length}');
-      print('- Diseases: ${diseasesData.length}');
-      print('- Terms: ${termsData.length}');
-      
-      // Convert to Map format with type field for search
+      // Init SharedPreferences cache (fast, just gets the singleton)
+      final cacheService = CacheService();
+      await cacheService.init();
+
+      // Read directly from SharedPreferences cache — instant, no API calls
+      final drugsData = cacheService.getCachedDrugs();
+      final diseasesData = cacheService.getCachedDiseases();
+      final termsData = cacheService.getCachedDictionary();
+      final normalRangesData = cacheService.getCachedNormalRanges();
+      final notesData = cacheService.getCachedNotes();
+
       final drugs = drugsData.map((drug) => {
         'id': drug.id,
         'name': drug.name,
         'kurdish': drug.kurdish,
-        'arabic': '', // Drug model doesn't have arabic field
+        'arabic': '',
         'usage': drug.usage,
         'sideEffect': drug.sideEffect,
         'otherInfo': drug.otherInfo,
@@ -663,7 +819,7 @@ class _HomePageState extends State<HomePage> {
         'id': disease.id,
         'name': disease.name,
         'kurdish': disease.kurdish,
-        'arabic': '', // Disease model doesn't have arabic field
+        'arabic': '',
         'cause': disease.cause,
         'control': disease.control,
         'symptoms': disease.symptoms,
@@ -681,34 +837,142 @@ class _HomePageState extends State<HomePage> {
         'type': 'terminology',
       }).toList();
 
-      // Combine all data and update both _allItems and _filteredItems
+      final normalRanges = normalRangesData.map((range) => {
+        'id': range.id,
+        'name': range.name,
+        'kurdish': '',
+        'arabic': '',
+        'parameter': range.parameter,
+        'category': range.category,
+        'species': range.species,
+        'unit': range.unit,
+        'type': 'normal_range',
+      }).toList();
+
+      final notes = notesData.map((note) => {
+        'id': note.name,
+        'name': note.name,
+        'kurdish': '',
+        'arabic': '',
+        'description': note.description ?? '',
+        'type': 'note',
+      }).toList();
+
       if (!mounted) return;
+
+      final combinedItems = [...drugs, ...diseases, ...terms, ...normalRanges, ...notes];
+
       setState(() {
-        _allItems = [...drugs, ...diseases, ...terms];
+        _allItems = combinedItems;
         _filteredItems = [];
+        _isDataLoading = false;
       });
-      
-      print('Total items loaded for search: ${_allItems.length}');
+
+      // Re-run search if user already typed while loading
+      final currentQuery = _searchController.text;
+      if (currentQuery.isNotEmpty) {
+        _filterItems(currentQuery);
+      }
+
+      // If any data type is missing from cache, fetch from API in background
+      if (combinedItems.isEmpty || normalRangesData.isEmpty || notesData.isEmpty) {
+        _fetchAllDataFromApi();
+      }
+
     } catch (e) {
-      print('Error loading data for search: $e');
+      if (kDebugMode) debugPrint('Error loading search data from cache: $e');
       if (!mounted) return;
-      setState(() {
-        _allItems = [];
-        _filteredItems = [];
-      });
+      setState(() => _isDataLoading = false);
+      // Try API as fallback
+      _fetchAllDataFromApi();
     }
   }
 
+  Future<void> _fetchAllDataFromApi() async {
+    try {
+      final syncService = SyncService();
+      await syncService.initializeApp();
+
+      final drugsData = await syncService.loadCategoryData<Drug>('drugs');
+      final diseasesData = await syncService.loadCategoryData<Disease>('diseases');
+      final termsData = await syncService.loadCategoryData<Word>('dictionary');
+
+      List<NormalRange> normalRangesData = [];
+      List<Note> notesData = [];
+      try { normalRangesData = await syncService.loadCategoryData<NormalRange>('normal_ranges'); } catch (_) {}
+      try { notesData = await syncService.loadCategoryData<Note>('notes'); } catch (_) {}
+
+      if (!mounted) return;
+
+      final combinedItems = [
+        ...drugsData.map((d) => {'id': d.id, 'name': d.name, 'kurdish': d.kurdish, 'arabic': '', 'usage': d.usage, 'sideEffect': d.sideEffect, 'otherInfo': d.otherInfo, 'description': d.description, 'drugClass': d.drugClass, 'type': 'drug'}),
+        ...diseasesData.map((d) => {'id': d.id, 'name': d.name, 'kurdish': d.kurdish, 'arabic': '', 'cause': d.cause, 'control': d.control, 'symptoms': d.symptoms, 'category': d.category, 'imageUrl': d.imageUrl, 'type': 'disease'}),
+        ...termsData.map((t) => {'id': t.id, 'name': t.name, 'kurdish': t.kurdish, 'arabic': t.arabic, 'description': t.description, 'type': 'terminology'}),
+        ...normalRangesData.map((r) => {'id': r.id, 'name': r.name, 'kurdish': '', 'arabic': '', 'parameter': r.parameter, 'category': r.category, 'species': r.species, 'unit': r.unit, 'type': 'normal_range'}),
+        ...notesData.map((n) => {'id': n.name, 'name': n.name, 'kurdish': '', 'arabic': '', 'description': n.description ?? '', 'type': 'note'}),
+      ];
+
+      setState(() {
+        _allItems = combinedItems;
+        _filteredItems = [];
+        _isDataLoading = false;
+      });
+
+      final currentQuery = _searchController.text;
+      if (currentQuery.isNotEmpty) {
+        _filterItems(currentQuery);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Background API load failed: $e');
+      if (mounted) setState(() => _isDataLoading = false);
+    }
+  }
+
+  void _searchApiDirectly(String query) {
+    _apiSearchTimer?.cancel();
+    _apiSearchTimer = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
+      final apiService = ApiService();
+      // Search dictionary, drugs, and diseases in parallel
+      final results = await Future.wait([
+        apiService.searchDictionary(query, limit: 30),
+        apiService.fetchAllDrugs().then((drugs) =>
+            drugs.where((d) => (d.name).toLowerCase().contains(query.toLowerCase())).toList()),
+        apiService.fetchAllDiseases().then((diseases) =>
+            diseases.where((d) => (d.name).toLowerCase().contains(query.toLowerCase())).toList()),
+      ]);
+      if (!mounted || _searchController.text != query) return;
+      final words = results[0] as List;
+      final drugs = results[1] as List;
+      final diseases = results[2] as List;
+      final combined = [
+        ...words.map((w) => {'id': w.id, 'name': w.name, 'kurdish': w.kurdish, 'arabic': w.arabic, 'description': w.description, 'type': 'terminology'}),
+        ...drugs.map((d) => {'id': d.id, 'name': d.name, 'kurdish': d.kurdish, 'arabic': '', 'usage': d.usage, 'sideEffect': d.sideEffect, 'otherInfo': d.otherInfo, 'description': d.description, 'drugClass': d.drugClass, 'type': 'drug'}),
+        ...diseases.map((d) => {'id': d.id, 'name': d.name, 'kurdish': d.kurdish, 'arabic': '', 'cause': d.cause, 'control': d.control, 'symptoms': d.symptoms, 'category': d.category, 'imageUrl': d.imageUrl, 'type': 'disease'}),
+      ];
+      setState(() => _filteredItems = combined);
+      if (combined.isNotEmpty) _showSearchResults();
+    });
+  }
+
   void _filterItems(String query) {
-    print('Search query: "$query"');
-    print('Total items in _allItems: ${_allItems.length}');
-    
     if (query.isEmpty) {
+      _apiSearchTimer?.cancel();
       setState(() {
         _filteredItems = [];
       });
       _removeOverlay();
       return;
+    }
+
+    // If no local cache yet (first install), search API directly
+    if (_allItems.isEmpty) {
+      _searchApiDirectly(query); // Add _searchApiDirectly call
+      return;
+    }
+
+    if (kDebugMode) {
+      debugPrint('Searching for: "$query" in ${_allItems.length} items');
     }
 
     setState(() {
@@ -722,7 +986,7 @@ class _HomePageState extends State<HomePage> {
         if (_selectedFilter != 'All') {
           final itemType = item['type']?.toLowerCase() ?? '';
           final filterType = _selectedFilter.toLowerCase();
-          
+
           // Check if item matches the selected filter
           bool matchesFilter = false;
           switch (filterType) {
@@ -741,10 +1005,22 @@ class _HomePageState extends State<HomePage> {
             case 'normal ranges':
               matchesFilter = itemType == 'normal_range';
               break;
+            case 'books':
+              matchesFilter = itemType == 'book';
+              break;
+            case 'notes':
+              matchesFilter = itemType == 'note';
+              break;
+            case 'slides':
+              matchesFilter = itemType == 'slide';
+              break;
+            case 'tests':
+              matchesFilter = itemType == 'test';
+              break;
             default:
               matchesFilter = true;
           }
-          
+
           if (!matchesFilter) {
             return false;
           }
@@ -753,16 +1029,15 @@ class _HomePageState extends State<HomePage> {
         final matches = name.contains(searchQuery) || 
                kurdish.contains(searchQuery) || 
                arabic.contains(searchQuery);
-        
-        if (matches) {
-          print('Found match: ${item['name']} (${item['type']})');
-        }
-        
+
         return matches;
       }).toList();
+      
+      if (kDebugMode) {
+        debugPrint('Found ${_filteredItems.length} results for "$query"');
+      }
     });
-    
-    print('Filtered results: ${_filteredItems.length}');
+
     _showSearchResults();
   }
 
@@ -783,7 +1058,7 @@ class _HomePageState extends State<HomePage> {
             elevation: 8,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              constraints: BoxConstraints(
+              constraints: const BoxConstraints(
                 maxHeight: 200,
               ),
               decoration: BoxDecoration(
@@ -828,7 +1103,15 @@ class _HomePageState extends State<HomePage> {
       case 'instrument':
         return Icons.medical_services_outlined;
       case 'normal_range': 
-        return Icons.list_alt_outlined; 
+        return Icons.list_alt_outlined;
+      case 'note':
+        return Icons.note;
+      case 'book':
+        return Icons.book;
+      case 'slide':
+        return Icons.image;
+      case 'test':
+        return Icons.science;
       default:
         return Icons.search;
     }
@@ -845,7 +1128,15 @@ class _HomePageState extends State<HomePage> {
       case 'instrument':
         return item['category'] ?? 'Instrument';
       case 'normal_range': 
-        return item['species'] ?? item['category'] ?? 'Normal Range'; 
+        return item['species'] ?? item['category'] ?? 'Normal Range';
+      case 'note':
+        return 'Note';
+      case 'book':
+        return item['author'] ?? 'Book';
+      case 'slide':
+        return item['species'] ?? 'Slide';
+      case 'test':
+        return 'Test';
       default:
         return '';
     }
@@ -856,7 +1147,7 @@ class _HomePageState extends State<HomePage> {
   if (_searchFocusNode.hasFocus) {
     _searchFocusNode.unfocus();
   }
-  
+
   if (item['type'] == 'drug') {
       if (!context.mounted) return;
       Navigator.push(context, MaterialPageRoute(
@@ -914,6 +1205,35 @@ class _HomePageState extends State<HomePage> {
       Navigator.push(context, MaterialPageRoute(
         builder: (context) => const InstrumentsPage(),
       ));
+    } else if (item['type'] == 'note') {
+      if (!context.mounted) return;
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => NoteDetailsPage(
+          note: Note(
+            name: item['name'],
+            description: item['description'],
+            imageUrl: item['imageUrl'],
+            category: item['category'],
+          ),
+          isEditable: false,
+          showHeaderImage: true,
+        ),
+      ));
+    } else if (item['type'] == 'book') {
+      if (!context.mounted) return;
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => const BooksPage(),
+      ));
+    } else if (item['type'] == 'slide') {
+      if (!context.mounted) return;
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => const SlidesPage(initialCategory: 'All'),
+      ));
+    } else if (item['type'] == 'test') {
+      if (!context.mounted) return;
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => const TestsPage(initialCategory: 'All'),
+      ));
     }
   }
 
@@ -933,7 +1253,7 @@ class _HomePageState extends State<HomePage> {
           border: Border.all(
             color: Provider.of<ThemeProvider>(context).isDarkMode
                 ? Provider.of<ThemeProvider>(context).theme.colorScheme.onSurface
-                    .withOpacity(0.12)
+                    .withValues(alpha: 0.12)
                 : const Color(0xFFE2E8F0),
             width: 1,
           ),
@@ -944,12 +1264,25 @@ class _HomePageState extends State<HomePage> {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Icon(
-                  Icons.search,
-                  color: Provider.of<ThemeProvider>(context).isDarkMode
-                      ? Colors.white.withOpacity(0.6)
-                      : Colors.grey,
-                ),
+                child: _isDataLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Provider.of<ThemeProvider>(context).isDarkMode
+                                ? Colors.white.withValues(alpha: 0.6)
+                                : Colors.grey,
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        Icons.search,
+                        color: Provider.of<ThemeProvider>(context).isDarkMode
+                            ? Colors.white.withValues(alpha: 0.6)
+                            : Colors.grey,
+                      ),
               ),
               Expanded(
                 child: TextField(
@@ -963,7 +1296,7 @@ class _HomePageState extends State<HomePage> {
                     border: InputBorder.none,
                     hintStyle: TextStyle(
                       color: Provider.of<ThemeProvider>(context).isDarkMode
-                          ? Colors.white.withOpacity(0.6)
+                          ? Colors.white.withValues(alpha: 0.6)
                           : Colors.grey,
                     ),
                   ),
@@ -982,25 +1315,42 @@ class _HomePageState extends State<HomePage> {
                   _filterItems('');
                 },
                 color: Provider.of<ThemeProvider>(context).isDarkMode
-                    ? Colors.white.withOpacity(0.6)
+                    ? Colors.white.withValues(alpha: 0.6)
                     : Colors.grey,
               ),
             Container(
               height: 24,
               width: 1,
               color: Provider.of<ThemeProvider>(context).isDarkMode
-                  ? Colors.white.withOpacity(0.12)
-                  : Colors.grey.withOpacity(0.2),
-              margin: EdgeInsets.symmetric(horizontal: 8),
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.grey.withValues(alpha: 0.2),
+              margin: const EdgeInsets.symmetric(horizontal: 8),
             ),
-            IconButton(
-              icon: Icon(
-                Icons.filter_list,
-                color: Provider.of<ThemeProvider>(context).isDarkMode
-                    ? Colors.white.withOpacity(0.6)
-                    : Colors.grey,
-              ),
-              onPressed: () => _showFilterOptions(context),
+            Stack(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.filter_list,
+                    color: Provider.of<ThemeProvider>(context).isDarkMode
+                        ? Colors.white.withValues(alpha: 0.6)
+                        : Colors.grey,
+                  ),
+                  onPressed: () => _showFilterOptions(context),
+                ),
+                if (_selectedFilter != 'All')
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.orange,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
           ),
@@ -1015,9 +1365,13 @@ class _HomePageState extends State<HomePage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2D2D2D) : Colors.white,
+          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -1028,17 +1382,18 @@ class _HomePageState extends State<HomePage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
+                color: Colors.grey.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   Text(
-                    'فلتەرکردن بەپێی',
+                    'فلتەرکردن',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1046,56 +1401,63 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _selectedFilter = 'All');
-                      _filterItems(_searchController.text);
-                      Navigator.pop(context);
-                    },
-                    child: _buildFilterOption('هەموو', Icons.all_inclusive, Colors.blue, 'All'),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _selectedFilter = 'Drugs');
-                      _filterItems(_searchController.text);
-                      Navigator.pop(context);
-                    },
-                    child: _buildFilterOption('دەرمانەکان', Icons.medication, Colors.green, 'Drugs'),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _selectedFilter = 'Diseases');
-                      _filterItems(_searchController.text);
-                      Navigator.pop(context);
-                    },
-                    child: _buildFilterOption('نەخۆشیەکان', Icons.medical_services, Colors.orange, 'Diseases'),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _selectedFilter = 'Terminology');
-                      _filterItems(_searchController.text);
-                      Navigator.pop(context);
-                    },
-                    child: _buildFilterOption('زاراوەکان', Icons.menu_book, Colors.purple, 'Terminology'),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _selectedFilter = 'Instruments');
-                      _filterItems(_searchController.text);
-                      Navigator.pop(context);
-                    },
-                    child: _buildFilterOption('کەرەستە پزیشکیەکان', Icons.medical_services_outlined, Colors.pink, 'Instruments'),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      setState(() => _selectedFilter = 'Normal Ranges');
-                      _filterItems(_searchController.text);
-                      Navigator.pop(context);
-                    },
-                    child: _buildFilterOption('پێوانە ئاساییەکان', Icons.list_alt_outlined, Colors.cyan.shade700, 'Normal Ranges'), 
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          setState(() => _selectedFilter = 'All');
+                          _filterItems(_searchController.text);
+                          Navigator.pop(context);
+                        },
+                        child: _buildFilterOption('هەموو', Icons.apps_rounded, const Color(0xFF4A7EB5), 'All'),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() => _selectedFilter = 'Drugs');
+                          _filterItems(_searchController.text);
+                          Navigator.pop(context);
+                        },
+                        child: _buildFilterOption('دەرمانەکان', Icons.medication, Colors.green, 'Drugs'),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() => _selectedFilter = 'Diseases');
+                          _filterItems(_searchController.text);
+                          Navigator.pop(context);
+                        },
+                        child: _buildFilterOption('نەخۆشیەکان', Icons.medical_services, Colors.orange, 'Diseases'),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() => _selectedFilter = 'Terminology');
+                          _filterItems(_searchController.text);
+                          Navigator.pop(context);
+                        },
+                        child: _buildFilterOption('زاراوەکان', Icons.menu_book, Colors.purple, 'Terminology'),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() => _selectedFilter = 'Normal Ranges');
+                          _filterItems(_searchController.text);
+                          Navigator.pop(context);
+                        },
+                        child: _buildFilterOption('پێوانە ئاساییەکان', Icons.list_alt_outlined, Colors.cyan.shade700, 'Normal Ranges'), 
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() => _selectedFilter = 'Notes');
+                          _filterItems(_searchController.text);
+                          Navigator.pop(context);
+                        },
+                        child: _buildFilterOption('تێبینیەکان', Icons.note, Colors.amber, 'Notes'),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
             ),
           ],
         ),
@@ -1107,53 +1469,70 @@ class _HomePageState extends State<HomePage> {
     final isDarkMode = Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final isSelected = _selectedFilter == filterKey;
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isSelected 
-            ? color.withOpacity(0.1) 
-            : (isDarkMode ? Colors.black12 : Colors.grey.withOpacity(0.05)),
-        borderRadius: BorderRadius.circular(12),
-        border: isSelected 
-            ? Border.all(color: color.withOpacity(0.3), width: 1)
+        color: isSelected
+            ? themeProvider.theme.colorScheme.primary
+            : isDarkMode
+                ? const Color(0xFF303030)
+                : Colors.grey[200],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isSelected
+              ? themeProvider.theme.colorScheme.primary
+              : Colors.transparent,
+          width: 1.5,
+        ),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: themeProvider.theme.colorScheme.primary.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
             : null,
       ),
       child: Directionality(
         textDirection: languageProvider.textDirection,
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(isSelected ? 0.2 : 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 20,
-              ),
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? Colors.white
+                  : isDarkMode
+                      ? Colors.grey[400]
+                      : Colors.grey[700],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isDarkMode ? Colors.white : Colors.black87,
-                ),
-                textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected
+                    ? Colors.white
+                    : isDarkMode
+                        ? Colors.grey[300]
+                        : Colors.grey[800],
               ),
+              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
             ),
-            if (isSelected)
-              Icon(
+            if (isSelected) ...[
+              const SizedBox(width: 4),
+              const Icon(
                 Icons.check_circle,
-                color: color,
-                size: 20,
+                size: 14,
+                color: Colors.white,
               ),
+            ],
           ],
         ),
       ),
@@ -1164,19 +1543,23 @@ class _HomePageState extends State<HomePage> {
       {required String id, bool inBottomSheet = false}) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final languageProvider = Provider.of<LanguageProvider>(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
+    final iconSize = isTablet ? 36.0 : 32.0;
+    final labelFontSize = isTablet ? 13.0 : 14.0;
 
     Widget iconWidget;
     if (icon is IconData) {
       iconWidget = Icon(
         icon,
-        size: 32,
+        size: iconSize,
         color: color,
       );
     } else if (icon is String) {
       iconWidget = Image.asset(
         'assets/Icons/$icon',
-        width: 32,
-        height: 32,
+        width: iconSize,
+        height: iconSize,
         color: color,
       );
     } else {
@@ -1189,7 +1572,7 @@ class _HomePageState extends State<HomePage> {
         if (_searchFocusNode.hasFocus) {
           _searchFocusNode.unfocus();
         }
-        
+
         if (id == 'drugs') {
           Navigator.push(
             context,
@@ -1231,7 +1614,11 @@ class _HomePageState extends State<HomePage> {
             context,
             createRoute(const SettingsPage()),
           );
-
+        } else if (id == 'quiz') {
+          Navigator.push(
+            context,
+            createRoute(const QuizPage()),
+          );
         }
       },
       child: Container(
@@ -1245,7 +1632,7 @@ class _HomePageState extends State<HomePage> {
           boxShadow: [
             BoxShadow(
               color:
-                  Colors.black.withOpacity(themeProvider.isDarkMode ? 0.3 : 0.05),
+                  Colors.black.withValues(alpha: themeProvider.isDarkMode ? 0.3 : 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -1261,7 +1648,7 @@ class _HomePageState extends State<HomePage> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -1278,7 +1665,7 @@ class _HomePageState extends State<HomePage> {
                       title,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: labelFontSize,
                         color: themeProvider.isDarkMode
                             ? Colors.white
                             : const Color(0xFF1E293B),
@@ -1297,9 +1684,27 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildActionItem(IconData icon, String label, Color color, {VoidCallback? onTap}) {
+  Widget _buildActionItem(dynamic icon, String label, Color color, {VoidCallback? onTap}) {
     Provider.of<LanguageProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
+  
+    Widget iconWidget;
+    if (icon is IconData) {
+      iconWidget = Icon(
+        icon,
+        color: color,
+        size: 24,
+      );
+    } else if (icon is String) {
+      iconWidget = Image.asset(
+        'assets/Icons/$icon',
+        width: 24,
+        height: 24,
+        color: color,
+      );
+    } else {
+      iconWidget = const SizedBox();
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(24),
@@ -1310,22 +1715,18 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: themeProvider.isDarkMode
-                  ? color.withOpacity(0.2)
-                  : color.withOpacity(0.1),
+                  ? color.withValues(alpha: 0.2)
+                  : color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 24,
-            ),
+            child: iconWidget,
           ),
           const SizedBox(height: 8),
           Text(
             label,
             style: TextStyle(
               color: themeProvider.isDarkMode
-                  ? Colors.white.withOpacity(0.87)
+                  ? Colors.white.withValues(alpha: 0.87)
                   : const Color(0xFF475569),
               fontSize: 12,
             ),
@@ -1338,7 +1739,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildShowMoreItem() {
     final themeProvider = Provider.of<ThemeProvider>(context);
     Provider.of<LanguageProvider>(context);
-    final Color moreColor = Colors.blue;
+    const Color moreColor = Color(0xFF4A7EB5);
     return Container(
       decoration: BoxDecoration(
         color: themeProvider.isDarkMode
@@ -1348,7 +1749,7 @@ class _HomePageState extends State<HomePage> {
         boxShadow: [
           BoxShadow(
             color:
-                Colors.black.withOpacity(themeProvider.isDarkMode ? 0.3 : 0.05),
+                Colors.black.withValues(alpha: themeProvider.isDarkMode ? 0.3 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1371,10 +1772,10 @@ class _HomePageState extends State<HomePage> {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: moreColor.withOpacity(0.1),
+                      color: moreColor.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Center(
+                    child: const Center(
                       child: Icon(
                         Icons.more_horiz,
                         color: moreColor,
@@ -1417,9 +1818,13 @@ class _HomePageState extends State<HomePage> {
       builder: (context) {
         Provider.of<LanguageProvider>(context);
         final themeProvider = Provider.of<ThemeProvider>(context);
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isTablet = screenWidth >= 600;
+        final sheetHeight = MediaQuery.of(context).size.height * (isTablet ? 0.92 : 0.75);
+        final crossAxisCount = isTablet ? 4 : 3;
 
         return Container(
-          height: MediaQuery.of(context).size.height * 0.75,
+          height: sheetHeight,
           decoration: BoxDecoration(
             color: themeProvider.theme.scaffoldBackgroundColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -1452,15 +1857,15 @@ class _HomePageState extends State<HomePage> {
               ),
               Expanded(
                 child: GridView.count(
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
-                  crossAxisCount: 3,
+                  crossAxisCount: crossAxisCount,
                   mainAxisSpacing: 16,
                   crossAxisSpacing: 16,
                   childAspectRatio: 0.9,
                   children: [
                     _buildFeatureItem('Drugs.png', 'دەرمانەکان',
-                        const Color(0xFF2563EB),
+                        const Color(0xFF1A3460),
                         id: 'drugs', inBottomSheet: true),
                     _buildFeatureItem('Diseases.png', 'نەخۆشیەکان',
                         const Color(0xFF16A34A),
@@ -1486,6 +1891,9 @@ class _HomePageState extends State<HomePage> {
                     _buildFeatureItem(
                         'books.png', 'کتێبەکان', const Color.fromARGB(255, 117, 25, 203),
                         id: 'books', inBottomSheet: true),
+                    _buildFeatureItem(
+                        "quiz.png", 'تاقیکردنەوە', const Color(0xFF8B5CF6),
+                        id: 'quiz', inBottomSheet: true),
                   ],
                 ),
               ),
@@ -1575,7 +1983,7 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(
+                            color: Colors.black.withValues(alpha:
                                 themeProvider.isDarkMode ? 0.3 : 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
@@ -1587,12 +1995,11 @@ class _HomePageState extends State<HomePage> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
                           onTap: () {
+                            final type = (category['type'] as String?) ?? 'Other';
+                            // Close the bottom sheet before navigating
                             Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              createRoute(
-                                SlidesPage(initialCategory: category['type']),
-                              ),
+                            Navigator.of(context).push(
+                              createRoute(SlidesPage(initialCategory: type)),
                             );
                           },
                           child: Column(
@@ -1601,7 +2008,7 @@ class _HomePageState extends State<HomePage> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF00B4A2).withOpacity(0.1),
+                                  color: const Color(0xFF00B4A2).withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: category['icon'] is IconData
@@ -1660,24 +2067,12 @@ class _HomePageState extends State<HomePage> {
         'icon': 'Serology.png',
       },
       {
-        'name': 'Endocrinology',
-        'icon': 'Endocrinology.png',
-      },
-      {
         'name': 'Biochemistry',
         'icon': 'Biochemistry.png',
       },
       {
         'name': 'Bacteriology',
         'icon': 'Bacteriology.png',
-      },
-      {
-        'name': 'Autoimmunity',
-        'icon': 'Autoimmunity.png',
-      },
-      {
-        'name': 'Genetics',
-        'icon': 'Genetics.png',
       },
       {
         'name': 'Others',
@@ -1715,7 +2110,7 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  'پۆلەکانی تاقیکردنەوە',
+                  'پشکنینە تاقیگەییەکان',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1745,8 +2140,8 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(
-                                themeProvider.isDarkMode ? 0.3 : 0.05),
+                            color: Colors.black.withValues(
+                                alpha: themeProvider.isDarkMode ? 0.3 : 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           ),
@@ -1757,9 +2152,16 @@ class _HomePageState extends State<HomePage> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
                           onTap: () {
-                            // Handle category selection
-                            Navigator.pop(context);
-                            // Add navigation to specific test category page here
+                            Navigator.pop(context); // Close the bottom sheet
+                            // Navigate to TestsPage with the selected category
+                            Navigator.push(
+                              context,
+                              createRoute(
+                                TestsPage(
+                                  initialCategory: category['name'] as String,
+                                ),
+                              ),
+                            );
                           },
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -1767,7 +2169,7 @@ class _HomePageState extends State<HomePage> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF00B4A2).withOpacity(0.1),
+                                  color: const Color(0xFF00B4A2).withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: category['icon'] is IconData
@@ -1815,75 +2217,241 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<bool> _onWillPop() async {
+    // If not on home tab (index 2), navigate to home tab
+    if (_selectedIndex != 2) {
+      setState(() {
+        _selectedIndex = 2;
+      });
+      return false; // Don't exit
+    }
+    
+    // If on home tab, show exit confirmation dialog
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final isRTL = languageProvider.isRTL;
+    
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (context) => Dialog(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: themeProvider.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: themeProvider.theme.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.exit_to_app_rounded,
+                  size: 32,
+                  color: themeProvider.theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Title
+              Text(
+                isRTL ? 'دەرچوون' : 'Exit App',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                  fontFamily: isRTL ? 'NRT' : null,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              
+              // Content
+              Text(
+                isRTL 
+                    ? 'دڵنیای دەتەوێت لە بەرنامەکە دەربچیت؟' 
+                    : 'Are you sure you want to exit the application?',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: themeProvider.isDarkMode ? Colors.white70 : Colors.black54,
+                  height: 1.5,
+                  fontFamily: isRTL ? 'NRT' : null,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              
+              // Actions
+              Row(
+                children: [
+                   Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        // For TextButton, we typically set foregroundColor for text color
+                        foregroundColor: themeProvider.isDarkMode ? Colors.white70 : Colors.grey[700],
+                      ),
+                      child: Text(
+                        isRTL ? 'نەخێر' : 'Cancel',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: isRTL ? 'NRT' : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: themeProvider.theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        isRTL ? 'بەڵێ' : 'Exit',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: isRTL ? 'NRT' : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ) ?? false;
+    
+    return shouldExit;
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     Provider.of<LanguageProvider>(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth >= 600;
 
-    return Scaffold(
-      body: SafeArea(
-        child: _currentScreen(),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 8),
-          decoration: BoxDecoration(
-            color: themeProvider.theme.scaffoldBackgroundColor,
-            boxShadow: [
-              BoxShadow(
-                blurRadius: 20,
-                color: Colors.black.withOpacity(.1),
-              ),
-            ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
+        final shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: VetDictUpgradeAlert(
+        child: Scaffold(
+          body: SafeArea(
+            child: _currentScreen(),
           ),
-          child: GNav(
-            rippleColor: Colors.grey[300]!,
-            hoverColor: Colors.grey[100]!,
-            gap: 8,
-            activeColor: Colors.white,
-            iconSize: 24,
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-            duration: const Duration(milliseconds: 400),
-            tabBackgroundColor: themeProvider.theme.colorScheme.primary,
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            color: themeProvider.isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : themeProvider.theme.colorScheme.primary,
-            tabs: [
-              GButton(
-                icon: Icons.favorite_rounded,
-                text: 'دڵخوازەکان',
-              ),
-              GButton(
-                icon: Icons.history_rounded,
-                text: 'مێژوو',
-              ),
-              GButton(
-                icon: Icons.home_rounded,
-                text: 'سەرەکی',
-              ),
-              GButton(
-                icon: Icons.menu_book_rounded,
-                text: 'کتێبەکان',
-              ),
-              GButton(
-                icon: Icons.person_rounded,
-                text: 'پرۆفایل',
-              ),
-            ],
-            selectedIndex: _selectedIndex,
-            onTabChange: (index) {
-              // Unfocus search field to prevent keyboard from showing
-              if (_searchFocusNode.hasFocus) {
-                _searchFocusNode.unfocus();
-              }
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
+          bottomNavigationBar: SafeArea(
+            child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTablet ? 20.0 : 15.0,
+                    vertical: isTablet ? 10 : 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: themeProvider.theme.scaffoldBackgroundColor,
+                    boxShadow: [
+                      BoxShadow(
+                        blurRadius: 20,
+                        color: Colors.black.withValues(alpha: .1),
+                      ),
+                    ],
+                  ),
+                  child: GNav(
+                    rippleColor: themeProvider.isDarkMode
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.grey[300]!,
+                    hoverColor: themeProvider.isDarkMode
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.grey[100]!,
+                    gap: 8,
+                    activeColor: Colors.white,
+                    iconSize: isTablet ? 22 : 24,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isTablet ? 20 : 15,
+                      vertical: isTablet ? 12 : 10,
+                    ),
+                    duration: const Duration(milliseconds: 400),
+                    tabBackgroundColor: themeProvider.isDarkMode
+                        ? const Color(0xFF1A3460)
+                        : themeProvider.theme.colorScheme.primary,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    color: themeProvider.isDarkMode
+                        ? Colors.white.withValues(alpha: 0.6)
+                        : themeProvider.theme.colorScheme.primary,
+                    tabs: const [
+                      GButton(
+                        icon: Icons.favorite_rounded,
+                        text: 'دڵخوازەکان',
+                      ),
+                      GButton(
+                        icon: Icons.history_rounded,
+                        text: 'مێژوو',
+                      ),
+                      GButton(
+                        icon: Icons.home_rounded,
+                        text: 'سەرەکی',
+                      ),
+                      GButton(
+                        icon: Icons.menu_book_rounded,
+                        text: 'کتێبەکان',
+                      ),
+                      GButton(
+                        icon: Icons.person_rounded,
+                        text: 'پرۆفایل',
+                      ),
+                    ],
+                    selectedIndex: _selectedIndex,
+                    onTabChange: (index) {
+                      // Unfocus search field to prevent keyboard from showing
+                      if (_searchFocusNode.hasFocus) {
+                        _searchFocusNode.unfocus();
+                      }
+                      setState(() {
+                        _selectedIndex = index;
+                      });
+                    },
+                  ),
+            ),
           ),
-        ),
-      ),
+        ), // closes Scaffold
+      ), // closes VetDictUpgradeAlert
     );
   }
 }

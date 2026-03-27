@@ -9,6 +9,11 @@ class Drug {
   final String kurdish;
   final String category;
   final String imageUrl;
+  final String withdrawalTimes;
+  final String drugInteractions;
+  final String contraindications;
+  final String speciesDosages;
+  final String tradeNames;
 
   Drug({
     required this.id,
@@ -21,6 +26,11 @@ class Drug {
     this.usage = '',
     this.drugClass = '',
     this.imageUrl = '',
+    this.withdrawalTimes = '',
+    this.drugInteractions = '',
+    this.contraindications = '',
+    this.speciesDosages = '',
+    this.tradeNames = '',
   });
 
   factory Drug.fromJson(Map<String, dynamic> json) {
@@ -35,6 +45,11 @@ class Drug {
       kurdish: json['kurdish'] ?? '',
       category: json['category'] ?? '',
       imageUrl: json['imageUrl'] ?? json['image_url'] ?? '',
+      withdrawalTimes: json['withdrawalTimes'] ?? json['withdrawal_times'] ?? '',
+      drugInteractions: json['drugInteractions'] ?? json['drug_interactions'] ?? '',
+      contraindications: json['contraindications'] ?? '',
+      speciesDosages: json['speciesDosages'] ?? json['species_dosages'] ?? '',
+      tradeNames: json['tradeNames'] ?? json['trade_names'] ?? '',
     );
   }
 
@@ -42,13 +57,18 @@ class Drug {
     return {
       'id': id,
       'name': name,
-      'description': description,
-      'otherInfo': otherInfo,
-      'sideEffect': sideEffect,
-      'usage': usage,
-      'class': drugClass,
-      'kurdish': kurdish,
       'category': category,
+      'class': drugClass,
+      'description': description,
+      'usage': usage,
+      'sideEffect': sideEffect,
+      'contraindications': contraindications,
+      'drug_interactions': drugInteractions,
+      'withdrawal_times': withdrawalTimes,
+      'species_dosages': speciesDosages,
+      'trade_names': tradeNames,
+      'otherInfo': otherInfo,
+      'kurdish': kurdish,
       'imageUrl': imageUrl,
     };
   }

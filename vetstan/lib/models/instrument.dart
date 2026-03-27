@@ -4,6 +4,7 @@ class Instrument {
   final String description;
   final String imageUrl;
   final String createdAt;
+  final String category;
 
   Instrument({
     required this.id,
@@ -11,6 +12,7 @@ class Instrument {
     required this.description,
     required this.imageUrl,
     required this.createdAt,
+    this.category = '',
   });
 
   String getName(bool isEnglish) => name;
@@ -23,6 +25,7 @@ class Instrument {
       description: json['description'] ?? '',
       imageUrl: json['image_url'] ?? '',
       createdAt: json['created_at'] ?? '',
+      category: json['category'] ?? '',
     );
   }
 
@@ -33,6 +36,7 @@ class Instrument {
       'description': description,
       'image_url': imageUrl,
       'created_at': createdAt,
+      'category': category,
     };
   }
 

@@ -1,37 +1,380 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../providers/theme_provider.dart';
 import '../providers/language_provider.dart';
+import '../services/api_service.dart';
+import '../models/ceo.dart';
+import '../models/supporter.dart';
 
-class AboutPage extends StatelessWidget {
+// ─── Single accent used across the entire page ───────────────────────────────
+const Color _kAccent = Color(0xFF4A6FA5);
+
+class AboutPage extends StatefulWidget {
   const AboutPage({Key? key}) : super(key: key);
 
   @override
+  State<AboutPage> createState() => _AboutPageState();
+}
+
+class _AboutPageState extends State<AboutPage> {
+  final ApiService _apiService = ApiService();
+  
+  List<CEO> _ceos = [];
+  List<Supporter> _supporters = [];
+  String? _aboutText;
+  bool _isLoadingAbout = true;
+
+  bool _isLoadingCEOs = true;
+  bool _isLoadingSupporters = true;
+  
+  String? _ceoError;
+  String? _supporterError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    // Try loading from cache first
+    final hasCache = await _loadFromCache();
+    
+    // If we have cache, check for updates in background
+    // If no cache, wait for API data
+    if (hasCache) {
+      _checkForUpdates();
+    } else {
+      await _checkForUpdates();
+      setState(() {
+        _isLoadingAbout = false;
+        _isLoadingCEOs = false;
+        _isLoadingSupporters = false;
+      });
+    }
+  }
+
+  Future<bool> _loadFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      bool hasAnyCache = false;
+      
+      // Load cached about text
+      final cachedAboutText = prefs.getString('about_text');
+      if (cachedAboutText != null) {
+        setState(() {
+          _aboutText = cachedAboutText;
+          _isLoadingAbout = false;
+        });
+        hasAnyCache = true;
+      }
+      
+      // Load cached CEOs
+      final cachedCEOsJson = prefs.getString('about_ceos');
+      if (cachedCEOsJson != null) {
+        final List<dynamic> ceosData = json.decode(cachedCEOsJson);
+        setState(() {
+          _ceos = ceosData.map((e) => CEO.fromJson(e)).toList();
+          _isLoadingCEOs = false;
+        });
+        hasAnyCache = true;
+      }
+      
+      // Load cached Supporters
+      final cachedSupportersJson = prefs.getString('about_supporters');
+      if (cachedSupportersJson != null) {
+        final List<dynamic> supportersData = json.decode(cachedSupportersJson);
+        setState(() {
+          _supporters = supportersData.map((e) => Supporter.fromJson(e)).toList();
+          _isLoadingSupporters = false;
+        });
+        hasAnyCache = true;
+      }
+      
+      return hasAnyCache;
+    } catch (e) {
+      developer.log('Error loading from cache: $e');
+      return false;
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Fetch fresh data from API
+      final newAboutText = await _apiService.fetchAboutText();
+      final newCEOs = await _apiService.fetchCEOs();
+      final newSupporters = await _apiService.fetchSupporters();
+      
+      // Calculate hashes of new data
+      final newAboutHash = newAboutText?.hashCode.toString() ?? '';
+      final newCEOsHash = json.encode(newCEOs.map((e) => e.toJson()).toList()).hashCode.toString();
+      final newSupportersHash = json.encode(newSupporters.map((e) => e.toJson()).toList()).hashCode.toString();
+      
+      // Get cached hashes
+      final cachedAboutHash = prefs.getString('about_text_hash') ?? '';
+      final cachedCEOsHash = prefs.getString('about_ceos_hash') ?? '';
+      final cachedSupportersHash = prefs.getString('about_supporters_hash') ?? '';
+      
+      // Update only if data changed
+      bool hasChanges = false;
+      
+      if (newAboutHash != cachedAboutHash && newAboutText != null) {
+        await prefs.setString('about_text', newAboutText);
+        await prefs.setString('about_text_hash', newAboutHash);
+        if (mounted) {
+          setState(() => _aboutText = newAboutText);
+        }
+        hasChanges = true;
+      }
+      
+      if (newCEOsHash != cachedCEOsHash) {
+        final ceosJson = json.encode(newCEOs.map((e) => e.toJson()).toList());
+        await prefs.setString('about_ceos', ceosJson);
+        await prefs.setString('about_ceos_hash', newCEOsHash);
+        if (mounted) {
+          setState(() => _ceos = newCEOs);
+        }
+        hasChanges = true;
+      }
+      
+      if (newSupportersHash != cachedSupportersHash) {
+        final supportersJson = json.encode(newSupporters.map((e) => e.toJson()).toList());
+        await prefs.setString('about_supporters', supportersJson);
+        await prefs.setString('about_supporters_hash', newSupportersHash);
+        if (mounted) {
+          setState(() => _supporters = newSupporters);
+        }
+        hasChanges = true;
+      }
+      
+      if (hasChanges && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('زانیاری نوێکراوە'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Color(0xFF4A6FA5),
+          ),
+        );
+      }
+    } catch (e) {
+      developer.log('Error checking for updates: $e');
+      // Silently fail - user already has cached data
+    }
+  }
+
+  Future<void> _forceRefresh() async {
+    setState(() {
+      _isLoadingAbout = true;
+      _isLoadingCEOs = true;
+      _isLoadingSupporters = true;
+      _ceoError = null;
+      _supporterError = null;
+    });
+    
+    await _checkForUpdates();
+    
+    setState(() {
+      _isLoadingAbout = false;
+      _isLoadingCEOs = false;
+      _isLoadingSupporters = false;
+    });
+  }
+
+  IconData _getIconFromString(String? iconName) {
+    if (iconName == null) return Icons.person;
+    switch (iconName.toLowerCase()) {
+      case 'school':
+        return Icons.school;
+      case 'medical_services':
+        return Icons.medical_services;
+      case 'person':
+        return Icons.person;
+      default:
+        return Icons.person;
+    }
+  }
+
+  // ─── Shared card decoration ─────────────────────────────────────────────────
+  BoxDecoration _cardDecoration(ThemeProvider tp) => BoxDecoration(
+        color: tp.isDarkMode ? const Color(0xFF232323) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: tp.isDarkMode
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.grey.withValues(alpha: 0.18),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black
+                .withValues(alpha: tp.isDarkMode ? 0.22 : 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      );
+
+  // ─── Shared section title ───────────────────────────────────────────────────
+  Widget _sectionTitle(
+      String text, ThemeProvider tp, LanguageProvider lp) {
+    return SizedBox(
+      width: double.infinity,
+      child: Directionality(
+        textDirection: lp.textDirection,
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: tp.isDarkMode ? Colors.white : Colors.black87,
+            fontFamily: 'Inter',
+            letterSpacing: 0.2,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  // ─── Shared avatar ──────────────────────────────────────────────────────────
+  Widget _avatar(
+      {required String? imagePath,
+      required IconData fallbackIcon,
+      required ThemeProvider tp,
+      double size = 58}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: tp.isDarkMode ? const Color(0xFF3A3A3A) : const Color(0xFFECEFF4),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: tp.isDarkMode
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.grey.withValues(alpha: 0.22),
+          width: 1.5,
+        ),
+      ),
+      child: imagePath != null
+          ? ClipOval(
+              child: Image.asset(
+                imagePath,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Icon(
+                  fallbackIcon,
+                  size: size * 0.44,
+                  color: tp.isDarkMode ? Colors.white54 : Colors.grey[500],
+                ),
+              ),
+            )
+          : Icon(
+              fallbackIcon,
+              size: size * 0.44,
+              color: tp.isDarkMode ? Colors.white54 : Colors.grey[500],
+            ),
+    );
+  }
+
+  // ─── Shared name + subtitle row ─────────────────────────────────────────────
+  Widget _nameBlock({
+    required String name,
+    required String subtitle,
+    String? extra,
+    required ThemeProvider tp,
+    required LanguageProvider lp,
+  }) {
+    return Column(
+      crossAxisAlignment:
+          lp.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Directionality(
+          textDirection: lp.textDirection,
+          child: Text(
+            name,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: tp.isDarkMode ? Colors.white : Colors.black87,
+              fontFamily: 'Inter',
+            ),
+            textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Directionality(
+          textDirection: lp.textDirection,
+          child: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              height: 1.5,
+              color: tp.isDarkMode
+                  ? Colors.white.withValues(alpha: 0.50)
+                  : Colors.grey[600],
+              fontFamily: 'Inter',
+            ),
+            textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
+          ),
+        ),
+        if (extra != null && extra.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Directionality(
+            textDirection: lp.textDirection,
+            child: Text(
+              extra,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                color: tp.isDarkMode
+                    ? Colors.white.withValues(alpha: 0.38)
+                    : Colors.grey[400],
+                fontFamily: 'Inter',
+              ),
+              textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final languageProvider = Provider.of<LanguageProvider>(context);
+    final tp = Provider.of<ThemeProvider>(context);
+    final lp = Provider.of<LanguageProvider>(context);
 
     return Scaffold(
-      backgroundColor: themeProvider.theme.scaffoldBackgroundColor,
+      backgroundColor: tp.theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: themeProvider.theme.scaffoldBackgroundColor,
+        backgroundColor: tp.theme.scaffoldBackgroundColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back,
-            color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+            color: tp.isDarkMode ? Colors.white : Colors.black,
           ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Directionality(
-          textDirection: languageProvider.textDirection,
+          textDirection: lp.textDirection,
           child: Text(
             'دەربارەی',
             style: TextStyle(
-              color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-              fontSize: 24,
+              color: tp.isDarkMode ? Colors.white : Colors.black,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               fontFamily: 'Inter',
             ),
@@ -41,21 +384,17 @@ class AboutPage extends StatelessWidget {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // App Description Section
-              _buildDescriptionSection(themeProvider, languageProvider),
-              
-              const SizedBox(height: 30),
-              
-              // CEO Section
-              _buildCEOSection(themeProvider, languageProvider),
-              
-              const SizedBox(height: 30),
-              
-              // Support Team Section
-              _buildSupportTeamSection(themeProvider, languageProvider),
+              _buildDescriptionSection(tp, lp),
+              const SizedBox(height: 20),
+              _buildCEOSection(tp, lp),
+              const SizedBox(height: 20),
+              _buildSupportTeamSection(tp, lp),
+              const SizedBox(height: 32),
+              _buildFooter(tp),
             ],
           ),
         ),
@@ -63,869 +402,774 @@ class AboutPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDescriptionSection(ThemeProvider themeProvider, LanguageProvider languageProvider) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: themeProvider.isDarkMode 
-            ? themeProvider.theme.colorScheme.surface 
-            : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(themeProvider.isDarkMode ? 0.3 : 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+  // ───────────────────────────────────────────────────────────────────────────
+  // Footer
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildFooter(ThemeProvider tp) {
+    return Column(
+      children: [
+        const Text(
+          'VET DICT +',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: _kAccent,
+            fontFamily: 'Inter',
+            letterSpacing: 1.2,
           ),
-        ],
-      ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '© 2026  All rights reserved',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: tp.isDarkMode
+                ? Colors.white.withValues(alpha: 0.35)
+                : Colors.grey[400],
+            fontFamily: 'Inter',
+            letterSpacing: 0.4,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // SECTION 1 – App description (dynamic Markdown from API)
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildDescriptionSection(ThemeProvider tp, LanguageProvider lp) {
+    final textColor = tp.isDarkMode
+        ? Colors.white.withValues(alpha: 0.80)
+        : Colors.grey[800]!;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(tp),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Directionality(
-                  textDirection: languageProvider.textDirection,
-                  child: Text(
-                    'دەربارەی ئەپڵیکەیشن',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-                      fontFamily: 'Inter',
-                    ),
-                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          _sectionTitle('دەربارەی ئەپڵیکەیشن', tp, lp),
+          const SizedBox(height: 14),
           
-          const SizedBox(height: 16),
-          
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: RichText(
-              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-              text: TextSpan(
-                style: TextStyle(
-                  fontSize: 16,
-                  height: 1.7,
-                  color: themeProvider.isDarkMode 
-                      ? Colors.white.withOpacity(0.85) 
-                      : Colors.grey[700],
-                  fontFamily: 'Inter',
-                ),
-                children: [
-                  const TextSpan(
-                    text: '+VET DICT ',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF00B4A2),
-                    ),
-                  ),
-                  const TextSpan(
-                    text: 'یەکەم فەرهەنگی پزیشکی پیشەیی و تەکنەلۆژی پێشکەوتووە بۆ پزیشکانی ڤێتیرنەری لە کوردستان. ئەم ئەپڵیکەیشنە بە شێوەیەکی زانستی و پیشەیی کۆمەڵێک زانیاری پزیشکی گرنگ پێشکەش دەکات:\n\n',
-                  ),
-                  TextSpan(
-                    text: '• دەرمانەکان و بەکارهێنانیان\n',
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.9) : Colors.grey[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextSpan(
-                    text: '• نەخۆشییەکان و چارەسەرەکانیان\n',
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.9) : Colors.grey[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextSpan(
-                    text: '• زاراوە پزیشکیەکان و زانستیەکان\n',
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.9) : Colors.grey[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextSpan(
-                    text: '• کتێبە پزیشکیەکان و سەرچاوە زانستیەکان\n',
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.9) : Colors.grey[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextSpan(
-                    text: '•وە چەندین تایبەتمەندی تر...\n\n',
-                    style: TextStyle(
-                      color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.9) : Colors.grey[800],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const TextSpan(
-                    text: 'ئامانجمان پشتگیری پزیشکانی ڤێتیرنەریە لە کوردستان بۆ دەستگەیشتن بە زانیاری پێویست بە شێوەیەکی خێرا، ئاسان و پیشەیی لە زمانی کوردیدا.',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Mission Statement Box
+          // Medical/Health Disclaimer - Required by Play Store policy
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF00B4A2).withOpacity(0.1),
-                  const Color(0xFF00B4A2).withOpacity(0.05),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: const Color(0xFF00B4A2).withOpacity(0.2),
-                width: 1,
+                color: const Color(0xFFF59E0B),
+                width: 1.5,
               ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00B4A2).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.lightbulb_outline,
-                    color: Color(0xFF00B4A2),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Directionality(
-                    textDirection: languageProvider.textDirection,
-                    child: Text(
-                      'پێشکەوتنی پزیشکی ڤێتیرنەریە لە کوردستان لە ڕێگەی تەکنەلۆژیاوە',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF00B4A2),
-                        fontFamily: 'Inter',
-                      ),
-                      textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCEOSection(ThemeProvider themeProvider, LanguageProvider languageProvider) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: themeProvider.isDarkMode 
-            ? themeProvider.theme.colorScheme.surface 
-            : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(themeProvider.isDarkMode ? 0.3 : 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Directionality(
-                  textDirection: languageProvider.textDirection,
-                  child: Text(
-                    'بەڕێوەبەرانی پڕۆژە',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-                      fontFamily: 'Inter',
-                    ),
-                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          // Second CEO - Shadman Othman
-          _buildCEOCard(
-            name: 'شادمان عثمان',
-            role: 'بەڕێوەبەری تەکنیکی و گەشەپێدەر',
-            description: 'خوێندکاری پزیشکی ڤێتیرنەری - زانکۆی سلێمانی',
-            color: const Color(0xFF2563EB),
-            socialMedia: {
-              'facebook': 'https://www.facebook.com/shadman.osman.2025',
-              'viber': 'tel:+9647824961601',
-            },
-            themeProvider: themeProvider,
-            languageProvider: languageProvider,
-            imagePath: 'assets/images/persons/shadman.png',
-          ),
-         
-          
-          const SizedBox(height: 16),
-           // First CEO - Haroon Mubarak
-          _buildCEOCard(
-            name: 'هاڕوون موبارەک',
-            role: 'بەڕێوەبەر و کۆکەرەوەی زانیاری',
-            description: 'خوێندکاری پزیشکی ڤێتیرنەری - زانکۆی سلێمانی',
-            color: const Color(0xFF16A34A),
-            socialMedia: {
-              'facebook': 'https://www.facebook.com/harun.mubark.2025',
-              'viber': 'tel:+9647734402627',
-            },
-            themeProvider: themeProvider,
-            languageProvider: languageProvider,
-            imagePath: 'assets/images/persons/haroon.png',
-          ),
-          
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSupportTeamSection(ThemeProvider themeProvider, LanguageProvider languageProvider) {
-    final List<Map<String, dynamic>> supportTeam = [
-      {
-        'name': 'د. پاڤێڵ عمر',
-        'title': 'پزیشکی ڤێتیرنەری و مامۆستای زانکۆی سلێمانی',
-        'color': const Color(0xFF059669),
-        'icon': Icons.medical_services,
-        'imagePath': 'assets/images/persons/pavel.png',
-      },
-      {
-        'name': 'پرۆفیسۆر د. فەرەیدوون عبدالستار',
-        'title': 'پرۆفیسۆر و مامۆستای زانکۆ و ڕاگری پێشووی کۆلیژی پزیشکی ڤێتیرنەری',
-        'color': const Color(0xFF7C3AED),
-        'icon': Icons.school,
-        'imagePath': 'assets/images/persons/faraidoon.png',
-      },
-    ];
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            themeProvider.isDarkMode 
-                ? const Color(0xFF1F2937)
-                : Colors.white,
-            themeProvider.isDarkMode 
-                ? const Color(0xFF374151)
-                : const Color(0xFFFAFAFA),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(themeProvider.isDarkMode ? 0.4 : 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-            spreadRadius: 2,
-          ),
-        ],
-        border: Border.all(
-          color: themeProvider.isDarkMode 
-              ? Colors.white.withOpacity(0.1)
-              : Colors.grey.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          // Header Section with Enhanced Design
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFFEAB308).withOpacity(0.1),
-                  const Color(0xFFEAB308).withOpacity(0.05),
-                ],
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: languageProvider.isRTL 
-                        ? CrossAxisAlignment.end 
-                        : CrossAxisAlignment.start,
-                    children: [
-                      Directionality(
-                        textDirection: languageProvider.textDirection,
-                        child: Text(
-                          'هاوکاران',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-                            fontFamily: 'Inter',
-                            letterSpacing: 0.5,
-                          ),
-                          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Directionality(
-                        textDirection: languageProvider.textDirection,
-                        child: Text(
-                          'سپاسی هەریەکە لەم بەڕێزانە دەکەین کە بە چەندین شێواز هاوکارمان بوون لە بەرەوپێش بردنی ئەم پرۆژەیە',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: themeProvider.isDarkMode 
-                                ? Colors.white.withOpacity(0.7) 
-                                : Colors.grey[600],
-                            fontFamily: 'Inter',
-                          ),
-                          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Support Team Cards
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: supportTeam.map((member) => _buildEnhancedSupporterCard(
-                member,
-                themeProvider,
-                languageProvider,
-              )).toList(),
-            ),
-          ),
-          
-          // Appreciation Footer
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  const Color(0xFFEAB308).withOpacity(0.05),
-                ],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.favorite,
-                  color: Colors.red.withOpacity(0.7),
+                const Icon(
+                  Icons.info_outline,
+                  color: Color(0xFFD97706),
                   size: 20,
                 ),
-                const SizedBox(width: 8),
-                Flexible(
+                const SizedBox(width: 10),
+                Expanded(
                   child: Directionality(
-                    textDirection: languageProvider.textDirection,
+                    textDirection: lp.textDirection,
                     child: Text(
-                      'سپاس بۆ هەموو ئەوانەی پشتگیری ئەم پرۆژەیەیان کردووە',
+                      'ئاگاداری: VET DICT+ تەنها بۆ مەبەستی پەروەردەیی و زانیاری پێدانە. بەهیچ شێوەیەک ناکرێت بۆ مەبەستی چارەسەرکردن پشتی پێ ببەسترێت.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: themeProvider.isDarkMode 
-                            ? Colors.white.withOpacity(0.6) 
-                            : Colors.grey[600],
-                        fontFamily: 'Inter',
-                        fontStyle: FontStyle.italic,
+                        height: 1.5,
+                        color: tp.isDarkMode ? const Color(0xFF92400E) : const Color(0xFF78350F),
+                        fontFamily: 'NRT',
+                        fontWeight: FontWeight.w500,
                       ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
                     ),
                   ),
                 ),
               ],
             ),
           ),
+          
+          const SizedBox(height: 4),
+          if (_isLoadingAbout)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_kAccent),
+                ),
+              ),
+            )
+          else if (_aboutText != null && _aboutText!.isNotEmpty)
+            Directionality(
+              textDirection: lp.textDirection,
+              child: Builder(
+                builder: (context) {
+                  final rawText = _aboutText!;
+                  // Handle Delta JSON format (from flutter_quill)
+                  if (rawText.trimLeft().startsWith('[') && rawText.contains('"insert"')) {
+                    try {
+                      final deltaOps = (json.decode(rawText) as List).cast<Map<String, dynamic>>();
+                      return _buildDeltaContent(deltaOps, textColor, tp, lp);
+                    } catch (e) {
+                      developer.log('Error parsing Delta JSON: $e');
+                    }
+                  }
+                  // If looks like markdown, render as markdown
+                  if (rawText.contains('**') || rawText.contains('# ') || rawText.contains('- ') || rawText.contains('> ')) {
+                    return MarkdownBody(
+                      data: rawText,
+                      styleSheet: MarkdownStyleSheet(
+                        p: TextStyle(
+                          fontSize: 14,
+                          height: 1.8,
+                          color: textColor,
+                          fontFamily: 'Inter',
+                        ),
+                        strong: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _kAccent,
+                          fontFamily: 'Inter',
+                        ),
+                        em: TextStyle(
+                          fontSize: 14,
+                          fontStyle: FontStyle.italic,
+                          color: textColor,
+                          fontFamily: 'Inter',
+                        ),
+                        h1: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: tp.isDarkMode ? Colors.white : Colors.black87,
+                          fontFamily: 'Inter',
+                        ),
+                        h2: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: tp.isDarkMode ? Colors.white : Colors.black87,
+                          fontFamily: 'Inter',
+                        ),
+                        h3: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: _kAccent,
+                          fontFamily: 'Inter',
+                        ),
+                        listBullet: const TextStyle(
+                          fontSize: 14,
+                          color: _kAccent,
+                          fontFamily: 'Inter',
+                        ),
+                        blockquoteDecoration: BoxDecoration(
+                          color: _kAccent.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
+                          border: const Border(
+                            right: BorderSide(color: _kAccent, width: 3),
+                          ),
+                        ),
+                        code: TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'monospace',
+                          color: _kAccent,
+                          backgroundColor: _kAccent.withValues(alpha: 0.08),
+                        ),
+                        textAlign: WrapAlignment.start,
+                      ),
+                      onTapLink: (text, href, title) {
+                        if (href != null) _launchURL(href);
+                      },
+                    );
+                  }
+                  // Plain text rendering
+                  return Text(
+                    rawText,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.8,
+                      color: textColor,
+                      fontFamily: 'Inter',
+                    ),
+                    textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
+                  );
+                },
+              ),
+            )
+          else
+            // Fallback: show default hardcoded text if no API data
+            Directionality(
+              textDirection: lp.textDirection,
+              child: Text(
+                'VET DICT + یەکەم فەرهەنگی پزیشکی پیشەی بۆ پزیشکانی ڤێترنەری لە کوردستان.',
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.8,
+                  color: textColor,
+                  fontFamily: 'Inter',
+                ),
+                textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildEnhancedSupporterCard(
-    Map<String, dynamic> member,
-    ThemeProvider themeProvider,
-    LanguageProvider languageProvider,
-  ) {
-    final Color memberColor = member['color'] as Color;
-    final IconData memberIcon = member['icon'] as IconData;
-    final List<String> achievements = (member['achievements'] as List<String>?) ?? [];
-    
+  // ───────────────────────────────────────────────────────────────────────────
+  // SECTION 2 – Project managers
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildCEOSection(ThemeProvider tp, LanguageProvider lp) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            themeProvider.isDarkMode 
-                ? const Color(0xFF374151)
-                : Colors.white,
-            themeProvider.isDarkMode 
-                ? const Color(0xFF4B5563)
-                : const Color(0xFFFDFDFD),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: memberColor.withOpacity(0.15),
-            blurRadius: 15,
-            offset: const Offset(0, 6),
-            spreadRadius: 1,
-          ),
-          BoxShadow(
-            color: Colors.black.withOpacity(themeProvider.isDarkMode ? 0.2 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        border: Border.all(
-          color: memberColor.withOpacity(0.2),
-          width: 1.5,
-        ),
-      ),
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(tp),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with Avatar and Basic Info
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  memberColor.withOpacity(0.08),
-                  memberColor.withOpacity(0.04),
+          _sectionTitle('بەڕێوەبەرانی پڕۆژە', tp, lp),
+          const SizedBox(height: 16),
+          if (_isLoadingCEOs)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_kAccent),
+                ),
+              ),
+            )
+          else if (_ceoError != null)
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                  const SizedBox(height: 12),
+                  Text(
+                    'هەڵەیەک ڕوویدا لە بارکردنی زانیاری',
+                    style: TextStyle(
+                      color: tp.isDarkMode ? Colors.white70 : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _forceRefresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('هەوڵدانەوە'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ],
               ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
+            )
+          else if (_ceos.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'هیچ زانیارییەک نەدۆزرایەوە',
+                  style: TextStyle(
+                    color: tp.isDarkMode ? Colors.white70 : Colors.grey[600],
+                  ),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                // Enhanced Avatar
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    gradient: member['imagePath'] == null ? LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        memberColor,
-                        memberColor.withOpacity(0.8),
-                      ],
-                    ) : null,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: memberColor.withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+            )
+          else
+            ...List.generate(_ceos.length, (i) {
+              final ceo = _ceos[i];
+              final socialMedia = <String, String>{};
+              if (ceo.facebookUrl != null && ceo.facebookUrl!.isNotEmpty) {
+                socialMedia['facebook'] = ceo.facebookUrl!;
+              }
+              if (ceo.instagramUrl != null && ceo.instagramUrl!.isNotEmpty) {
+                socialMedia['instagram'] = ceo.instagramUrl!;
+              }
+              if (ceo.viberUrl != null && ceo.viberUrl!.isNotEmpty) {
+                socialMedia['viber'] = ceo.viberUrl!;
+              }
+              
+              return Column(
+                children: [
+                  _buildPersonRow(
+                    name: ceo.name,
+                    subtitle: ceo.role,
+                    extra: ceo.description,
+                    imagePath: ceo.imageUrl,
+                    fallbackIcon: Icons.person,
+                    tp: tp,
+                    lp: lp,
+                    socialMedia: socialMedia.isNotEmpty ? socialMedia : null,
                   ),
-                  child: member['imagePath'] != null
-                      ? ClipOval(
-                          child: Image.asset(
-                            member['imagePath'],
-                            width: 70,
-                            height: 70,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      memberColor,
-                                      memberColor.withOpacity(0.8),
-                                    ],
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  memberIcon,
-                                  size: 32,
-                                  color: Colors.white,
-                                ),
-                              );
-                            },
-                          ),
-                        )
-                      : Icon(
-                          memberIcon,
-                          size: 32,
-                          color: Colors.white,
-                        ),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                // Name and Title
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: languageProvider.isRTL 
-                        ? CrossAxisAlignment.end 
-                        : CrossAxisAlignment.start,
-                    children: [
-                      Directionality(
-                        textDirection: languageProvider.textDirection,
-                        child: Text(
-                          member['name'] ?? '',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-                            fontFamily: 'Inter',
-                            letterSpacing: 0.3,
-                          ),
-                          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 4),
-                      
-                      Directionality(
-                        textDirection: languageProvider.textDirection,
-                        child: Text(
-                          member['title'] ?? '',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: memberColor,
-                            fontFamily: 'Inter',
-                          ),
-                          textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                        ),
-                      ),
-                      
+                  if (i < _ceos.length - 1) _divider(tp),
+                ],
+              );
+            }),
+        ],
+      ),
+    );
+  }
 
-                    ],
+  // ───────────────────────────────────────────────────────────────────────────
+  // SECTION 3 – Support / collaborators
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildSupportTeamSection(ThemeProvider tp, LanguageProvider lp) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(tp),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('هاوکاران', tp, lp),
+          const SizedBox(height: 4),
+          Directionality(
+            textDirection: lp.textDirection,
+            child: Text(
+              'سوپاسی بێ پایانمان بۆ هەر یەکە لەم بەڕێزانە کە بە شێوازی جۆراو جۆر هاوکارمان بوون',
+              style: TextStyle(
+                fontSize: 12,
+                color: tp.isDarkMode
+                    ? Colors.white.withValues(alpha: 0.45)
+                    : Colors.grey[500],
+                fontFamily: 'Inter',
+              ),
+              textAlign: lp.isRTL ? TextAlign.right : TextAlign.left,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingSupporters)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_kAccent),
+                ),
+              ),
+            )
+          else if (_supporterError != null)
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                  const SizedBox(height: 12),
+                  Text(
+                    'هەڵەیەک ڕوویدا لە بارکردنی زانیاری',
+                    style: TextStyle(
+                      color: tp.isDarkMode ? Colors.white70 : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _forceRefresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('هەوڵدانەوە'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_supporters.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'هیچ زانیارییەک نەدۆزرایەوە',
+                  style: TextStyle(
+                    color: tp.isDarkMode ? Colors.white70 : Colors.grey[600],
                   ),
                 ),
+              ),
+            )
+          else
+            ...List.generate(_supporters.length, (i) {
+              final supporter = _supporters[i];
+              return Column(
+                children: [
+                  _buildPersonRow(
+                    name: supporter.name,
+                    subtitle: supporter.title,
+                    extra: supporter.description,
+                    imagePath: supporter.imageUrl,
+                    fallbackIcon: _getIconFromString(supporter.icon),
+                    tp: tp,
+                    lp: lp,
+                  ),
+                  if (i < _supporters.length - 1) _divider(tp),
+                ],
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Shared person row (avatar + name block + optional social buttons)
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildPersonRow({
+    required String name,
+    required String subtitle,
+    String? extra,
+    String? imagePath,
+    required IconData fallbackIcon,
+    required ThemeProvider tp,
+    required LanguageProvider lp,
+    Map<String, String>? socialMedia,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _avatar(imagePath: imagePath, fallbackIcon: fallbackIcon, tp: tp),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: lp.isRTL
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                _nameBlock(
+                    name: name, subtitle: subtitle, extra: extra, tp: tp, lp: lp),
+                if (socialMedia != null && socialMedia.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: lp.isRTL
+                        ? MainAxisAlignment.end
+                        : MainAxisAlignment.start,
+                    children: socialMedia.entries
+                        .map((e) => _socialButton(e.key, e.value, tp))
+                        .toList(),
+                  ),
+                ],
               ],
             ),
           ),
-          
+        ],
+      ),
+    );
+  }
 
-          
-          // Achievements Tags (only show if there are achievements)
-          if (achievements.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                alignment: languageProvider.isRTL ? WrapAlignment.end : WrapAlignment.start,
-                children: achievements.map((achievement) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: memberColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: memberColor.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Directionality(
-                    textDirection: languageProvider.textDirection,
-                    child: Text(
-                      achievement,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: memberColor.withOpacity(0.9),
-                        fontFamily: 'Inter',
-                      ),
-                    ),
-                  ),
-                )).toList(),
-              ),
+  // ───────────────────────────────────────────────────────────────────────────
+  // Divider between rows inside a card
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _divider(ThemeProvider tp) => Divider(
+        height: 1,
+        thickness: 1,
+        color: tp.isDarkMode
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.grey.withValues(alpha: 0.13),
+      );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Social media icon button (neutral style)
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _socialButton(String platform, String url, ThemeProvider tp) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: () => _launchURL(url),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: tp.isDarkMode
+                ? Colors.white.withValues(alpha: 0.07)
+                : Colors.grey.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: tp.isDarkMode
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.withValues(alpha: 0.20),
+              width: 1,
             ),
-        ],
-      ),
-    );
-  }
-
-
-
-  Widget _buildCEOCard({
-    required String name,
-    required String role,
-    required String description,
-    required Color color,
-    required Map<String, String> socialMedia,
-    required ThemeProvider themeProvider,
-    required LanguageProvider languageProvider,
-    String? imagePath,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: themeProvider.isDarkMode 
-            ? Colors.grey[800] 
-            : Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1,
+          ),
+          child: _socialIcon(platform, tp),
         ),
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: imagePath == null ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      color,
-                      color.withOpacity(0.8),
-                    ],
-                  ) : null,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: imagePath != null
-                    ? ClipOval(
-                        child: Image.asset(
-                          imagePath,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    color,
-                                    color.withOpacity(0.8),
-                                  ],
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                size: 30,
-                                color: Colors.white,
-                              ),
-                            );
-                          },
-                        ),
-                      )
-                    : const Icon(
-                        Icons.person,
-                        size: 30,
-                        color: Colors.white,
-                      ),
-              ),
-              
-              const SizedBox(width: 16),
-              
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: languageProvider.isRTL 
-                      ? CrossAxisAlignment.end 
-                      : CrossAxisAlignment.start,
-                  children: [
-                    Directionality(
-                      textDirection: languageProvider.textDirection,
-                      child: Text(
-                        name,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: themeProvider.isDarkMode ? Colors.white : Colors.black,
-                          fontFamily: 'Inter',
-                        ),
-                        textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 4),
-                    
-                    Directionality(
-                      textDirection: languageProvider.textDirection,
-                      child: Text(
-                        role,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                          fontFamily: 'Inter',
-                        ),
-                        textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 2),
-                    
-                    Directionality(
-                      textDirection: languageProvider.textDirection,
-                      child: Text(
-                        description,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: themeProvider.isDarkMode 
-                              ? Colors.white.withOpacity(0.7) 
-                              : Colors.grey[600],
-                          fontFamily: 'Inter',
-                        ),
-                        textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Social Media Links
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: socialMedia.entries.map((entry) {
-              return _buildSocialMediaButton(
-                entry.key,
-                entry.value,
-                color,
-                themeProvider,
-              );
-            }).toList(),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildSocialMediaButton(
-    String platform,
-    String url,
-    Color color,
-    ThemeProvider themeProvider,
-  ) {
-    return InkWell(
-      onTap: () => _launchURL(url),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: _buildSocialMediaIcon(platform, color),
-      ),
-    );
-  }
-
-  Widget _buildSocialMediaIcon(String platform, Color color) {
+  Widget _socialIcon(String platform, ThemeProvider tp) {
+    final Color iconColor =
+        tp.isDarkMode ? Colors.white60 : Colors.grey[600]!;
     switch (platform.toLowerCase()) {
       case 'facebook':
-        return Icon(
-          Icons.facebook,
-          size: 20,
-          color: color,
-        );
+        return Icon(Icons.facebook, size: 18, color: iconColor);
+      case 'instagram':
+        return FaIcon(FontAwesomeIcons.instagram, size: 18, color: iconColor);
       case 'viber':
         return Image.asset(
           'assets/icon/viber.png',
-          width: 20,
-          height: 20,
-          color: color,
-          errorBuilder: (context, error, stackTrace) {
-            return Icon(
-              Icons.chat_bubble,
-              size: 20,
-              color: color,
-            );
-          },
+          width: 18,
+          height: 18,
+          color: iconColor,
+          errorBuilder: (_, __, ___) =>
+              Icon(Icons.chat_bubble_outline, size: 18, color: iconColor),
         );
       default:
-        return Icon(
-          Icons.link,
-          size: 20,
-          color: color,
-        );
+        return Icon(Icons.link, size: 18, color: iconColor);
     }
   }
 
-  Future<void> _launchURL(String url) async {
-    try {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback for Facebook
-        if (url.contains('facebook.com')) {
-          final Uri fallbackUri = Uri.parse(url);
-          await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+  // ───────────────────────────────────────────────────────────────────────────
+  // Delta JSON renderer — converts Quill Delta ops into Flutter widgets
+  // Supports: bold, italic, underline, strikethrough, color, background,
+  //           headers (h1–h3), ordered/unordered lists, alignment, blockquote
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _buildDeltaContent(
+    List<Map<String, dynamic>> ops,
+    Color textColor,
+    ThemeProvider tp,
+    LanguageProvider lp,
+  ) {
+    // Split ops into lines, each line = list of (text, attributes) + line attrs
+    final lines = <_DeltaLine>[];
+    var currentSpans = <_DeltaSpan>[];
+    Map<String, dynamic> lineAttrs = {};
+
+    for (final op in ops) {
+      final insert = op['insert'];
+      final attrs = op['attributes'] as Map<String, dynamic>? ?? {};
+
+      if (insert is String) {
+        final parts = insert.split('\n');
+        for (int i = 0; i < parts.length; i++) {
+          if (parts[i].isNotEmpty) {
+            currentSpans.add(_DeltaSpan(parts[i], Map<String, dynamic>.from(attrs)));
+          }
+          if (i < parts.length - 1) {
+            // Newline found — flush current line
+            // Line-level attributes (header, list, align) come from attrs on the '\n' insert
+            if (parts[i].isEmpty && currentSpans.isEmpty && i == 0) {
+              lineAttrs = Map<String, dynamic>.from(attrs);
+            } else {
+              lineAttrs = i == 0 ? Map<String, dynamic>.from(attrs) : {};
+            }
+            lines.add(_DeltaLine(List.from(currentSpans), Map<String, dynamic>.from(lineAttrs)));
+            currentSpans = [];
+            lineAttrs = {};
+          }
+        }
+        // If the very last op is just '\n' with attrs, apply attrs to the last pending line
+        if (insert == '\n' && attrs.isNotEmpty && lines.isNotEmpty) {
+          lines.last.lineAttributes.addAll(attrs);
         }
       }
+    }
+    // Flush remaining spans
+    if (currentSpans.isNotEmpty) {
+      lines.add(_DeltaLine(currentSpans, lineAttrs));
+    }
+
+    // Build widgets for each line
+    final widgets = <Widget>[];
+    int orderedIndex = 0;
+    
+    for (final line in lines) {
+      final la = line.lineAttributes;
+      final header = la['header'] as int?;
+      final listType = la['list'] as String?;
+      final alignStr = la['align'] as String?;
+      final isBlockquote = la['blockquote'] == true;
+
+      // Determine base font size
+      double fontSize = 14;
+      FontWeight fontWeight = FontWeight.w400;
+      if (header != null) {
+        switch (header) {
+          case 1:
+            fontSize = 22;
+            fontWeight = FontWeight.w800;
+            break;
+          case 2:
+            fontSize = 18;
+            fontWeight = FontWeight.w700;
+            break;
+          case 3:
+            fontSize = 16;
+            fontWeight = FontWeight.w600;
+            break;
+        }
+      }
+
+      // Build text spans
+      final spans = <InlineSpan>[];
+      for (final s in line.spans) {
+        final a = s.attributes;
+        final isBold = a['bold'] == true;
+        final isItalic = a['italic'] == true;
+        final isUnderline = a['underline'] == true;
+        final isStrike = a['strike'] == true;
+        
+        Color? spanColor;
+        if (a['color'] is String) {
+          spanColor = _parseHexColor(a['color'] as String);
+        }
+        Color? bgColor;
+        if (a['background'] is String) {
+          bgColor = _parseHexColor(a['background'] as String);
+        }
+
+        final decorations = <TextDecoration>[];
+        if (isUnderline) decorations.add(TextDecoration.underline);
+        if (isStrike) decorations.add(TextDecoration.lineThrough);
+
+        spans.add(TextSpan(
+          text: s.text,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: isBold || header != null ? (isBold ? FontWeight.w700 : fontWeight) : FontWeight.w400,
+            fontStyle: isItalic ? FontStyle.italic : FontStyle.normal,
+            decoration: decorations.isEmpty ? TextDecoration.none : TextDecoration.combine(decorations),
+            color: spanColor ?? (header != null && header <= 2
+                ? (tp.isDarkMode ? Colors.white : Colors.black87)
+                : (header == 3 ? _kAccent : textColor)),
+            backgroundColor: bgColor,
+            fontFamily: 'Inter',
+            height: 1.6,
+          ),
+        ));
+      }
+
+      // If no spans, add empty span to preserve the empty line
+      if (spans.isEmpty) {
+        spans.add(TextSpan(
+          text: '',
+          style: TextStyle(fontSize: fontSize, height: 1.6, fontFamily: 'Inter'),
+        ));
+      }
+
+      // Determine alignment
+      TextAlign textAlign = lp.isRTL ? TextAlign.right : TextAlign.left;
+      if (alignStr != null) {
+        switch (alignStr) {
+          case 'center':
+            textAlign = TextAlign.center;
+            break;
+          case 'right':
+            textAlign = TextAlign.right;
+            break;
+          case 'justify':
+            textAlign = TextAlign.justify;
+            break;
+          default:
+            break;
+        }
+      }
+
+      Widget lineWidget = RichText(
+        textAlign: textAlign,
+        textDirection: lp.textDirection,
+        text: TextSpan(children: spans),
+      );
+
+      // Handle list items
+      if (listType != null) {
+        if (listType == 'ordered') {
+          orderedIndex++;
+        } else {
+          orderedIndex = 0;
+        }
+        final bullet = listType == 'ordered' ? '$orderedIndex. ' : '• ';
+        lineWidget = Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                bullet,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  color: _kAccent,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Inter',
+                  height: 1.6,
+                ),
+              ),
+              Expanded(child: lineWidget),
+            ],
+          ),
+        );
+      } else {
+        orderedIndex = 0;
+      }
+
+      // Handle blockquote
+      if (isBlockquote) {
+        lineWidget = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          margin: const EdgeInsets.only(bottom: 4),
+          decoration: BoxDecoration(
+            color: _kAccent.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+            border: Border(
+              right: lp.isRTL ? const BorderSide(color: _kAccent, width: 3) : BorderSide.none,
+              left: lp.isRTL ? BorderSide.none : const BorderSide(color: _kAccent, width: 3),
+            ),
+          ),
+          child: lineWidget,
+        );
+      }
+
+      widgets.add(Padding(
+        padding: EdgeInsets.only(bottom: header != null ? 8 : 2),
+        child: lineWidget,
+      ));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: widgets,
+    );
+  }
+
+  Color? _parseHexColor(String hex) {
+    try {
+      hex = hex.replaceFirst('#', '');
+      if (hex.length == 6) hex = 'FF$hex';
+      if (hex.length == 8) return Color(int.parse(hex, radix: 16));
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _launchURL(String url) async {
+
+    try {
+      // For Instagram: try native app deep link first, then HTTPS fallback
+      if (url.contains('instagram.com')) {
+        final path = Uri.parse(url).path; // e.g. /shadman_osman1/
+        final nativeUri = Uri.parse('instagram://user?username=${path.replaceAll('/', '')}');
+        try {
+          await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+          return;
+        } catch (_) {
+          // native app not installed, fall through to browser
+        }
+      }
+      final Uri uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
-      // Handle any errors silently or show a message
-      print('Could not launch $url: $e');
+      if (kDebugMode) debugPrint('Could not launch $url: $e');
     }
   }
+}
+
+// Helper classes for Delta JSON rendering
+class _DeltaSpan {
+  final String text;
+  final Map<String, dynamic> attributes;
+  _DeltaSpan(this.text, this.attributes);
+}
+
+class _DeltaLine {
+  final List<_DeltaSpan> spans;
+  final Map<String, dynamic> lineAttributes;
+  _DeltaLine(this.spans, this.lineAttributes);
 }

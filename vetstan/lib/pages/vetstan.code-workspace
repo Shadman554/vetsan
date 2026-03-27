@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../Desktop/python-database-main"
+		}
+	],
+	"settings": {
+		"git.ignoreLimitWarning": true
+	}
+}

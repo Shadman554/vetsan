@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/language_provider.dart';
-import '../utils/page_transition.dart';
+import 'package:vetstan/utils/page_transition.dart';
 import 'drug_details_page.dart';
 import 'disease_details_page.dart';
 import 'terminology_details_page.dart';
@@ -32,7 +32,8 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
 
   Widget _buildFavoritesList(List<dynamic> items, String type) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    Provider.of<LanguageProvider>(context);
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    final favoritesProvider = Provider.of<FavoritesProvider>(context);
 
     if (items.isEmpty) {
       return Center(
@@ -48,9 +49,10 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
             Text(
               'هیچ ${type.toLowerCase() == 'drug' ? 'دەرمانی' : type.toLowerCase() == 'disease' ? 'نەخۆشیی' : 'زاراوەی'} دڵخواز نییە',
               style: TextStyle(
-                color: themeProvider.isDarkMode ? themeProvider.theme.colorScheme.onSurface.withOpacity(0.6) : themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 fontSize: 18,
               ),
+              textDirection: languageProvider.textDirection,
             ),
           ],
         ),
@@ -62,39 +64,46 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
+        final isFavorite = favoritesProvider.isFavorite(item);
+        
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Container(
             decoration: BoxDecoration(
-              color: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+              color: themeProvider.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              boxShadow: themeProvider.isDarkMode
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: () {
-                  if (type == 'drug') {
+                  Widget? detailsPage;
+                  switch (type) {
+                    case 'drug':
+                      detailsPage = DrugDetailsPage(drug: item);
+                      break;
+                    case 'disease':
+                      detailsPage = DiseaseDetailsPage(disease: item);
+                      break;
+                    case 'terminology':
+                      detailsPage = TerminologyDetailsPage(terminology: item);
+                      break;
+                  }
+                  
+                  if (detailsPage != null) {
                     Navigator.push(
                       context,
-                      createRoute(DrugDetailsPage(drug: item)),
-                    );
-                  } else if (type == 'disease') {
-                    Navigator.push(
-                      context,
-                      createRoute(DiseaseDetailsPage(disease: item)),
-                    );
-                  } else if (type == 'terminology') {
-                    Navigator.push(
-                      context,
-                      createRoute(TerminologyDetailsPage(terminology: item)),
+                      createRoute(detailsPage),
                     );
                   }
                 },
@@ -105,58 +114,46 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: themeProvider.isDarkMode
-                              ? themeProvider.theme.colorScheme.primary.withOpacity(0.2)
-                              : themeProvider.theme.colorScheme.primary.withOpacity(0.1),
+                          color: themeProvider.theme.colorScheme.primary.withValues(
+                            alpha: themeProvider.isDarkMode ? 0.2 : 0.1
+                          ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          type == 'drug'
-                              ? Icons.medication_rounded
-                              : type == 'disease'
-                                  ? Icons.sick_rounded
-                                  : Icons.book_rounded,
+                          _getIconForType(type),
                           color: themeProvider.theme.colorScheme.primary,
                           size: 24,
                         ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.name,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: themeProvider.theme.colorScheme.onSurface,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          item.name ?? '',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: themeProvider.theme.colorScheme.onSurface,
+                          ),
+                          textDirection: languageProvider.textDirection,
                         ),
                       ),
                       IconButton(
                         icon: Icon(
-                          Provider.of<FavoritesProvider>(context, listen: false).isFavorite(item)
-                              ? Icons.bookmark
-                              : Icons.bookmark_border,
-                          color: Provider.of<FavoritesProvider>(context, listen: false).isFavorite(item)
+                          isFavorite ? Icons.bookmark : Icons.bookmark_border,
+                          color: isFavorite
                               ? (themeProvider.isDarkMode
-                                  ? Colors.blue.shade300
-                                  : Colors.blue.shade700)
+                                  ? const Color(0xFF4A7EB5)
+                                  : const Color(0xFF1A3460))
                               : (themeProvider.isDarkMode
                                   ? Colors.grey[600]
                                   : Colors.grey[400]),
                         ),
                         onPressed: () {
-                          final favoritesProvider = Provider.of<FavoritesProvider>(context, listen: false);
-                          if (favoritesProvider.isFavorite(item)) {
+                          if (isFavorite) {
                             favoritesProvider.removeFavorite(item);
                           } else {
                             favoritesProvider.addFavorite(item);
                           }
-                          setState(() {});
                         },
                       ),
                     ],
@@ -170,18 +167,33 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
     );
   }
 
+  IconData _getIconForType(String type) {
+    switch (type) {
+      case 'drug':
+        return Icons.medication_rounded;
+      case 'disease':
+        return Icons.sick_rounded;
+      case 'terminology':
+        return Icons.book_rounded;
+      default:
+        return Icons.favorite;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final favoritesProvider = Provider.of<FavoritesProvider>(context);
-    Provider.of<LanguageProvider>(context);
+    final languageProvider = Provider.of<LanguageProvider>(context);
 
     final drugFavorites = favoritesProvider.getDrugFavorites();
     final diseaseFavorites = favoritesProvider.getDiseaseFavorites();
     final wordFavorites = favoritesProvider.getWordFavorites();
 
     return Scaffold(
-      backgroundColor: themeProvider.isDarkMode ? themeProvider.theme.scaffoldBackgroundColor : Colors.grey[50],
+      backgroundColor: themeProvider.isDarkMode 
+          ? themeProvider.theme.scaffoldBackgroundColor 
+          : Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
         backgroundColor: themeProvider.theme.appBarTheme.backgroundColor,
@@ -196,7 +208,7 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
         bottom: TabBar(
           controller: _tabController,
           labelColor: themeProvider.theme.colorScheme.onSurface,
-          unselectedLabelColor: themeProvider.theme.colorScheme.onSurface.withOpacity(0.7),
+          unselectedLabelColor: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.7),
           indicatorColor: themeProvider.theme.colorScheme.primary,
           indicatorWeight: 3,
           labelStyle: const TextStyle(
@@ -207,41 +219,20 @@ class _FavoritesPageState extends State<FavoritesPage> with SingleTickerProvider
           tabs: [
             Tab(
               child: Directionality(
-                textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                child: Text(
-                  'دەرمانەکان',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
+                textDirection: languageProvider.textDirection,
+                child: const Text('دەرمانەکان'),
               ),
             ),
             Tab(
               child: Directionality(
-                textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                child: Text(
-                  'نەخۆشییەکان',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
+                textDirection: languageProvider.textDirection,
+                child: const Text('نەخۆشییەکان'),
               ),
             ),
             Tab(
               child: Directionality(
-                textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                child: Text(
-                  'زاراوەکان',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Inter',
-                  ),
-                ),
+                textDirection: languageProvider.textDirection,
+                child: const Text('زاراوەکان'),
               ),
             ),
           ],

@@ -1,11 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/language_provider.dart';
+import 'package:webview_flutter/webview_flutter.dart'; // Import WebView
+import 'package:flutter/gestures.dart'; // Import gestures
+import '../utils/constants.dart'; // Import constants
 import '../providers/theme_provider.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final bool isEmbedded;
+  
+  const LoginPage({
+    super.key,
+    this.isEmbedded = false,
+  });
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -36,6 +45,27 @@ class _LoginPageState extends State<LoginPage> {
     _nameController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  // NEW METHOD: Handle navigation after successful login
+  void _handleSuccessfulLogin() {
+    // If the login page is embedded (e.g., in ProfilePage), we don't want to pop/navigate
+    // The parent widget will rebuild automatically when auth state changes
+    if (widget.isEmbedded) {
+      return;
+    }
+
+    // Get the arguments passed to this page
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final returnRoute = args?['returnRoute'];
+    
+    if (returnRoute != null) {
+      // Navigate to the specified return route
+      Navigator.pushReplacementNamed(context, returnRoute);
+    } else {
+      // Default behavior - pop the login page to go back
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -74,13 +104,15 @@ class _LoginPageState extends State<LoginPage> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF556598),
+                      color: themeProvider.isDarkMode
+                          ? const Color(0xFF1A3460)
+                          : const Color(0xFF556598),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
                           color: themeProvider.isDarkMode 
-                              ? Colors.black.withOpacity(0.3)
-                              : Colors.black.withOpacity(0.1),
+                              ? Colors.black.withValues(alpha: 0.3)
+                              : Colors.black.withValues(alpha: 0.1),
                           blurRadius: 10,
                           offset: const Offset(0, 3),
                         ),
@@ -106,8 +138,8 @@ class _LoginPageState extends State<LoginPage> {
                     '+VET DICT',
                     style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.theme.colorScheme.onBackground,
+                      fontWeight: FontWeight.w600, // Changed from bold
+                      color: themeProvider.theme.colorScheme.onSurface,
                       fontFamily: 'Inter',
                     ),
                     textAlign: TextAlign.center,
@@ -119,8 +151,8 @@ class _LoginPageState extends State<LoginPage> {
                     _isLoginMode ? 'چوونە ژوورەوە' : 'دروستکردنی هەژمار',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.theme.colorScheme.onBackground,
+                      fontWeight: FontWeight.w600, // Changed from bold
+                      color: themeProvider.theme.colorScheme.onSurface,
                       fontFamily: 'NRT',
                     ),
                     textAlign: TextAlign.center,
@@ -239,7 +271,7 @@ class _LoginPageState extends State<LoginPage> {
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
+                                    color: Colors.black.withValues(alpha: 0.2),
                                     blurRadius: 15,
                                     offset: const Offset(0, 8),
                                   ),
@@ -248,8 +280,10 @@ class _LoginPageState extends State<LoginPage> {
                               child: ElevatedButton(
                                 onPressed: authProvider.isLoading ? null : _handleSubmit,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: themeProvider.theme.colorScheme.primary,
-                                  foregroundColor: themeProvider.theme.colorScheme.onPrimary,
+                                  backgroundColor: themeProvider.isDarkMode
+                                      ? const Color(0xFF1A3460)
+                                      : themeProvider.theme.colorScheme.primary,
+                                  foregroundColor: Colors.white,
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
@@ -299,7 +333,7 @@ class _LoginPageState extends State<LoginPage> {
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontFamily: 'Inter',
-                                    color: themeProvider.theme.colorScheme.onBackground.withOpacity(0.8),
+                                    color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.8),
                                   ),
                                   children: [
                                     TextSpan(
@@ -328,7 +362,7 @@ class _LoginPageState extends State<LoginPage> {
                               children: [
                                 Expanded(
                                   child: Divider(
-                                    color: themeProvider.theme.colorScheme.onBackground.withOpacity(0.3),
+                                    color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.3),
                                     thickness: 1,
                                   ),
                                 ),
@@ -338,7 +372,7 @@ class _LoginPageState extends State<LoginPage> {
                                     'یان',
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: themeProvider.theme.colorScheme.onBackground.withOpacity(0.6),
+                                      color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                                       fontFamily: 'NRT',
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -346,7 +380,7 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 Expanded(
                                   child: Divider(
-                                    color: themeProvider.theme.colorScheme.onBackground.withOpacity(0.3),
+                                    color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.3),
                                     thickness: 1,
                                   ),
                                 ),
@@ -363,7 +397,7 @@ class _LoginPageState extends State<LoginPage> {
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
+                                    color: Colors.black.withValues(alpha: 0.1),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   ),
@@ -378,7 +412,7 @@ class _LoginPageState extends State<LoginPage> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                     side: BorderSide(
-                                      color: Colors.grey.withOpacity(0.3),
+                                      color: Colors.grey.withValues(alpha: 0.3),
                                       width: 1,
                                     ),
                                   ),
@@ -396,7 +430,7 @@ class _LoginPageState extends State<LoginPage> {
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           Image.asset(
-                                            'assets/images/google_logo.png',
+                                            'assets/Icons/google.png',
                                             height: 24,
                                             width: 24,
                                             errorBuilder: (context, error, stackTrace) {
@@ -426,15 +460,36 @@ class _LoginPageState extends State<LoginPage> {
                             const SizedBox(height: 20),
                             
                             // Bottom section with terms
-                            Text(
-                              'بە چوونە ژوورەوە، تۆ ڕێکەوتننامە و سیاسەتی تایبەتمەندی قبوڵ دەکەیت',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: themeProvider.theme.colorScheme.onBackground.withOpacity(0.6),
-                                fontFamily: 'NRT',
-                              ),
+                            RichText(
                               textAlign: TextAlign.center,
                               textDirection: TextDirection.rtl,
+                              text: TextSpan(
+                                style: TextStyle(
+                                  fontSize: 12, // Slightly increased for better readability
+                                  color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                  fontFamily: 'NRT',
+                                ),
+                                children: [
+                                  const TextSpan(
+                                    text: 'بە چوونە ژوورەوە، تۆ ڕێکەوتننامە و ',
+                                  ),
+                                  TextSpan(
+                                    text: 'سیاسەتی تایبەتمەندی',
+                                    style: TextStyle(
+                                      color: themeProvider.theme.colorScheme.primary,
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                    recognizer: TapGestureRecognizer()
+                                      ..onTap = () {
+                                        _showPrivacyPolicyBottomSheet(context);
+                                      },
+                                  ),
+                                  const TextSpan(
+                                    text: ' قبوڵ دەکەیت',
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -472,14 +527,14 @@ class _LoginPageState extends State<LoginPage> {
         validator: validator,
         textDirection: languageProvider.textDirection,
         style: TextStyle(
-          color: themeProvider.theme.colorScheme.onBackground,
+          color: themeProvider.theme.colorScheme.onSurface,
           fontFamily: 'Inter',
           fontSize: 16,
         ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
-            color: themeProvider.theme.colorScheme.onBackground.withOpacity(0.7),
+            color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.7),
             fontFamily: 'Inter',
           ),
           prefixIcon: Icon(
@@ -496,7 +551,7 @@ class _LoginPageState extends State<LoginPage> {
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: themeProvider.theme.colorScheme.primary.withOpacity(0.3),
+              color: themeProvider.theme.colorScheme.primary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -530,51 +585,68 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // UPDATED: Handle Google Sign-In with better error handling
+  // UPDATED: Handle Google Sign-In with navigation
   Future<void> _handleGoogleSignIn() async {
-    print('🔴🔴🔴 GOOGLE SIGN-IN BUTTON PRESSED! 🔴🔴🔴');
-    print('📱 Device Info: Android');
-    print('⏰ Timestamp: ${DateTime.now()}');
+    if (kDebugMode) {
+      debugPrint('🔴🔴🔴 GOOGLE SIGN-IN BUTTON PRESSED! 🔴🔴🔴');
+      debugPrint('📱 Device Info: Android');
+      debugPrint('⏰ Timestamp: ${DateTime.now()}');
+    }
     
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     Map<String, dynamic> result;
     
     try {
       if (_isLoginMode) {
-        print('🔵🔵🔵 CALLING authProvider.signInWithGoogle() for LOGIN... 🔵🔵🔵');
+        if (kDebugMode) {
+          debugPrint('🔵🔵🔵 CALLING authProvider.signInWithGoogle() for LOGIN... 🔵🔵🔵');
+        }
         result = await authProvider.signInWithGoogle();
       } else {
-        print('🔵🔵🔵 CALLING authProvider.signUpWithGoogle() for REGISTRATION... 🔵🔵🔵');
-        // For registration mode, use signUpWithGoogle which forces registration first
+        if (kDebugMode) {
+          debugPrint('🔵🔵🔵 CALLING authProvider.signUpWithGoogle() for REGISTRATION... 🔵🔵🔵');
+        }
         result = await authProvider.signUpWithGoogle();
       }
-      print('🟡🟡🟡 GOOGLE RESULT: $result 🟡🟡🟡');
+      if (kDebugMode) {
+        debugPrint('🟡🟡🟡 GOOGLE RESULT: $result 🟡🟡🟡');
+      }
     } catch (error, stackTrace) {
-      print('❌❌❌ CRITICAL ERROR IN _handleGoogleSignIn: $error');
-      print('📋 Stack trace: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('❌❌❌ CRITICAL ERROR IN _handleGoogleSignIn: $error');
+        debugPrint('📋 Stack trace: $stackTrace');
+      }
       
       if (mounted) {
-        _showErrorSnackBar('هەڵەیەک ڕوویدا لە گووگڵ داخڵبوون: $error');
+        _showErrorSnackBar('تکایە پشکنینی هێڵی ئینتەرنێت بکە و دووبارە هەوڵ بدەوە');
       }
       return;
     }
     
     if (result['success'] == true) {
       // Success - user logged in successfully
-      print('✅ Google Sign-In successful!');
+      if (kDebugMode) {
+        debugPrint('✅ Google Sign-In successful!');
+      }
       
       // Show success message
       final userName = authProvider.userDisplayName;
       _showSuccessMessage(userName);
       
-      // Navigation will be handled by the main app automatically
+      // Handle navigation after successful login
+      if (mounted) {
+        _handleSuccessfulLogin();
+      }
+      
     } else {
       // Handle different error types
       final errorType = result['error_type'] ?? '';
       final message = result['message'] ?? 'Unknown error occurred';
       final email = result['email'] ?? '';
       
-      print('❌ Google Sign-In failed: $errorType - $message');
+      if (kDebugMode) {
+        debugPrint('❌ Google Sign-In failed: $errorType - $message');
+      }
       
       if (errorType == 'email_exists') {
         // Show dialog explaining the account exists with regular login
@@ -592,11 +664,11 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // UPDATED: Show better account exists dialog
+  // Show account exists dialog
   void _showAccountExistsDialog(String email, String message) {
     showDialog(
       context: context,
-      barrierDismissible: false, // User must choose an option
+      barrierDismissible: false,
       builder: (BuildContext context) {
         final languageProvider = Provider.of<LanguageProvider>(context);
         final themeProvider = Provider.of<ThemeProvider>(context);
@@ -604,7 +676,7 @@ class _LoginPageState extends State<LoginPage> {
         return Directionality(
           textDirection: languageProvider.textDirection,
           child: AlertDialog(
-            backgroundColor: themeProvider.theme.dialogBackgroundColor,
+            backgroundColor: themeProvider.theme.dialogTheme.backgroundColor ?? themeProvider.theme.colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -620,7 +692,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: Directionality(
                     textDirection: TextDirection.rtl,
                     child: Text(
-                      'هەژماری ئاسایی هەیە', // Regular Account Exists
+                      'هەژماری ئاسایی هەیە',
                       style: TextStyle(
                         fontFamily: 'NRT',
                         fontSize: 18,
@@ -652,10 +724,10 @@ class _LoginPageState extends State<LoginPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: themeProvider.theme.colorScheme.primary.withOpacity(0.1),
+                    color: themeProvider.theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: themeProvider.theme.colorScheme.primary.withOpacity(0.3),
+                      color: themeProvider.theme.colorScheme.primary.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -691,7 +763,7 @@ class _LoginPageState extends State<LoginPage> {
                     style: TextStyle(
                       fontSize: 14,
                       fontFamily: 'NRT',
-                      color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -699,46 +771,44 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
             actions: [
-              // Cancel button
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
                 style: TextButton.styleFrom(
-                  foregroundColor: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                  foregroundColor: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 child: const Text(
-                  'پاشگەزبوونەوە', // Cancel
+                  'پاشگەزبوونەوە',
                   style: TextStyle(
                     fontFamily: 'NRT',
                     fontSize: 14,
                   ),
                 ),
               ),
-              
-              // Login with regular account button
               ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  // Pre-fill the email and switch to login mode
                   _goToRegularLogin(email);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: themeProvider.theme.colorScheme.primary,
-                  foregroundColor: themeProvider.theme.colorScheme.onPrimary,
+                  backgroundColor: themeProvider.isDarkMode
+                      ? const Color(0xFF1A3460)
+                      : themeProvider.theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(Icons.login, size: 18),
                     SizedBox(width: 6),
                     Text(
-                      'چوونە ژوورەوە', // Login
+                      'چوونە ژوورەوە',
                       style: TextStyle(
                         fontFamily: 'NRT',
                         fontSize: 14,
@@ -746,6 +816,67 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPrivacyPolicyBottomSheet(BuildContext context) {
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..loadRequest(Uri.parse(AppConstants.privacyPolicyUrl));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final themeProvider = Provider.of<ThemeProvider>(context);
+
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.85,
+          decoration: BoxDecoration(
+            color: themeProvider.theme.scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                height: 4,
+                width: 40,
+                decoration: BoxDecoration(
+                  color: themeProvider.isDarkMode
+                      ? Colors.grey[700]
+                      : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'سیاسەتی تایبەتمەندی',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: themeProvider.theme.colorScheme.onSurface,
+                    fontFamily: 'NRT',
+                  ),
+                ),
+              ),
+              Expanded(
+                child: WebViewWidget(
+                  controller: controller,
+                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                    Factory<VerticalDragGestureRecognizer>(
+                      () => VerticalDragGestureRecognizer(),
+                    ),
+                  },
                 ),
               ),
             ],
@@ -781,7 +912,7 @@ class _LoginPageState extends State<LoginPage> {
             borderRadius: BorderRadius.circular(8),
           ),
           action: SnackBarAction(
-            label: 'باشە', // OK
+            label: 'باشە',
             textColor: Colors.white,
             onPressed: () {},
           ),
@@ -790,26 +921,24 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // UPDATED: Pre-fill email and switch to login mode with better UX
+  // Pre-fill email and switch to login mode
   void _goToRegularLogin(String email) {
-    // Pre-fill the email and switch to login mode
     setState(() {
       _emailController.text = email;
-      _isLoginMode = true; // Switch to login mode
-      _passwordController.clear(); // Clear password field
+      _isLoginMode = true;
+      _passwordController.clear();
     });
     
-    // Show a helpful message
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
+        content: const Row(
           children: [
-            const Icon(Icons.info_outline, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
+            Icon(Icons.info_outline, color: Colors.white, size: 20),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 'ئیمەیڵەکەت پڕکراوەتەوە. تکایە وشەی نهێنیت بنووسە.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'NRT',
                 ),
                 textDirection: TextDirection.rtl,
@@ -817,7 +946,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ],
         ),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF4A7EB5),
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
@@ -826,9 +955,10 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
     
-    // Auto-focus on password field after a short delay
     Future.delayed(const Duration(milliseconds: 500), () {
-      FocusScope.of(context).requestFocus(FocusNode());
+      if (mounted) {
+        FocusScope.of(context).requestFocus(FocusNode());
+      }
     });
   }
 
@@ -842,7 +972,7 @@ class _LoginPageState extends State<LoginPage> {
               const Icon(Icons.check_circle, color: Colors.white),
               const SizedBox(width: 8),
               Text(
-                'بەخێربێیت $userName!', // Welcome!
+                'بەخێربێیت $userName!',
                 style: const TextStyle(fontFamily: 'NRT'),
                 textDirection: TextDirection.rtl,
               ),
@@ -859,7 +989,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Handle form submission for regular login/register
+  // UPDATED: Handle form submission for regular login/register with navigation
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -886,7 +1016,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (mounted) {
       if (result['success'] == true) {
-        // Success - navigation will be handled by the main app
+        // Success
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -911,6 +1041,14 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         );
+        
+        // ADDED: Handle navigation after successful login
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _handleSuccessfulLogin();
+          }
+        });
+        
       } else {
         // Error
         String errorMessage = result['message'] ?? 'هەڵەیەک ڕوویدا';

@@ -40,7 +40,6 @@ class ThemeProvider extends ChangeNotifier {
       onPrimary: Colors.white,
       onSecondary: Colors.white,
       onSurface: const Color(0xFF1E293B),
-      onBackground: const Color(0xFF1E293B),
       onError: Colors.white,
     ),
     appBarTheme: const AppBarTheme(
@@ -54,25 +53,25 @@ class ThemeProvider extends ChangeNotifier {
         fontFamily: 'Inter',
       ),
     ),
-    cardTheme: CardTheme( // Removed const
+    cardTheme: const CardThemeData(
       color: Colors.white,
       elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
     ),
-    dividerTheme: DividerThemeData( // Removed const
-      color: const Color(0xFFE0E0E0),
+    dividerTheme: const DividerThemeData(
+      color: Color(0xFFE0E0E0),
       thickness: 1,
       indent: 16,
       endIndent: 16,
     ),
-    dialogTheme: DialogTheme( // Removed const
+    dialogTheme: DialogThemeData(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       titleTextStyle: const TextStyle(
           fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
       contentTextStyle: const TextStyle(fontSize: 16, color: Colors.black54),
     ),
-    bottomNavigationBarTheme: BottomNavigationBarThemeData( // Removed const
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: Colors.white,
       selectedItemColor: const Color(0xFF2563EB),
       unselectedItemColor: Colors.grey[600],
@@ -87,17 +86,15 @@ class ThemeProvider extends ChangeNotifier {
     fontFamily: 'Inter',
     fontFamilyFallback: const ['sans-serif'],
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF4B9EFF),
+      seedColor: const Color(0xFF1A3460),
       brightness: Brightness.dark,
-      primary: const Color(0xFF4B9EFF),
-      secondary: const Color(0xFF7B91B0),
+      primary: const Color(0xFF4A7EB5),
+      secondary: const Color(0xFF5B7BA0),
       surface: const Color(0xFF1E1E1E),
-      background: const Color(0xFF121212),
       error: const Color(0xFFCF6679),
       onPrimary: Colors.white,
       onSecondary: Colors.white,
       onSurface: const Color(0xFFE1E1E1),
-      onBackground: const Color(0xFFE1E1E1),
       onError: Colors.black,
     ),
     appBarTheme: const AppBarTheme(
@@ -111,28 +108,28 @@ class ThemeProvider extends ChangeNotifier {
         fontFamily: 'Inter',
       ),
     ),
-    cardTheme: CardTheme( // Removed const
-      color: const Color(0xFF1E1E1E),
+    cardTheme: const CardThemeData(
+      color: Color(0xFF1E1E1E),
       elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
     ),
-    dividerTheme: DividerThemeData( // Removed const
-      color: const Color(0xFF2C2C2C),
+    dividerTheme: const DividerThemeData(
+      color: Color(0xFF2C2C2C),
       thickness: 1,
       indent: 16,
       endIndent: 16,
     ),
-    dialogTheme: DialogTheme( // Removed const
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      titleTextStyle: const TextStyle(
+    dialogTheme: const DialogThemeData(
+      backgroundColor: Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+      titleTextStyle: TextStyle(
           fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-      contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white70),
+      contentTextStyle: TextStyle(fontSize: 16, color: Colors.white70),
     ),
-    bottomNavigationBarTheme: BottomNavigationBarThemeData( // Removed const
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: const Color(0xFF1E1E1E),
-      selectedItemColor: const Color(0xFF4B9EFF),
-      unselectedItemColor: Colors.grey[400],
+      selectedItemColor: const Color(0xFF4A7EB5),
+      unselectedItemColor: Colors.grey[500],
       elevation: 8,
     ),
   );

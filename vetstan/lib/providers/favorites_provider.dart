@@ -38,7 +38,6 @@ class FavoritesProvider with ChangeNotifier {
           notifyListeners();
         } catch (e) {
           // Handle parsing errors gracefully
-          print('Error loading favorites: $e');
         }
       }
     });

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../models/drug.dart';
 import '../models/disease.dart';
 import '../models/word.dart';
+import 'package:vetstan/utils/page_transition.dart';
 import 'drug_details_page.dart';
 import 'disease_details_page.dart';
 import 'terminology_details_page.dart';
@@ -40,17 +41,42 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
   }
 
   void _navigateToDetails(BuildContext context, HistoryItem item) {
+    // If we have the complete data object, use it directly like favorites page
+    if (item.data != null) {
+      Widget? detailsPage;
+      switch (item.type) {
+        case 'drug':
+          detailsPage = DrugDetailsPage(drug: item.data);
+          break;
+        case 'disease':
+          detailsPage = DiseaseDetailsPage(disease: item.data);
+          break;
+        case 'terminology':
+          detailsPage = TerminologyDetailsPage(terminology: item.data);
+          break;
+      }
+      
+      if (detailsPage != null) {
+        Navigator.push(
+          context,
+          createRoute(detailsPage),
+        );
+      }
+      return;
+    }
+
+    // Fallback for old history items without complete data
     if (item.type == 'drug') {
       if (!context.mounted) return;
       Navigator.push(context, MaterialPageRoute(
         builder: (context) => DrugDetailsPage(
           drug: Drug(
-            id: item.title, // Using title as ID since it's unique
+            id: item.title,
             name: item.title,
-            description: item.description,
+            description: item.description.isNotEmpty ? item.description : 'No additional information available from history.',
             kurdish: '',
             category: '',
-            otherInfo: '',
+            otherInfo: item.description.isNotEmpty ? 'Viewed from history on ${DateFormat('MMM dd, yyyy').format(item.timestamp)}' : '',
             sideEffect: '',
             usage: '',
             drugClass: '',
@@ -63,12 +89,12 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
       Navigator.push(context, MaterialPageRoute(
         builder: (context) => DiseaseDetailsPage(
           disease: Disease(
-            id: item.title, // Using title as ID since it's unique
+            id: item.title,
             name: item.title,
             cause: '',
             control: '',
             kurdish: '',
-            symptoms: '',
+            symptoms: item.description.isNotEmpty ? item.description : 'No additional information available from history.',
             category: '',
             imageUrl: '',
           ),
@@ -79,11 +105,11 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
       Navigator.push(context, MaterialPageRoute(
         builder: (context) => TerminologyDetailsPage(
           terminology: Word(
-            id: item.title, // Using title as ID since it's unique
+            id: item.title,
             name: item.title,
             kurdish: '',
             arabic: '',
-            description: item.description,
+            description: item.description.isNotEmpty ? item.description : 'No additional information available from history.',
           ),
         ),
       ));
@@ -101,7 +127,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
         return Directionality(
           textDirection: languageProvider.textDirection,
           child: AlertDialog(
-            backgroundColor: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+            backgroundColor: themeProvider.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
             title: Text(
               'پاککردنەوەی مێژوو',
               style: TextStyle(
@@ -115,7 +141,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             content: Text(
               'دڵنیایت لە پاککردنەوەی هەموو مێژووەکە؟',
               style: TextStyle(
-                color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 fontFamily: 'Inter',
                 fontSize: 16,
               ),
@@ -192,7 +218,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             Text(
               'هیچ مێژووی ${type.toLowerCase() == 'drug' ? 'دەرمان' : type.toLowerCase() == 'disease' ? 'نەخۆشی' : 'زاراوە'} نییە',
               style: TextStyle(
-                color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 fontSize: 18,
               ),
             ),
@@ -213,15 +239,17 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
           padding: const EdgeInsets.only(bottom: 12),
           child: Container(
             decoration: BoxDecoration(
-              color: themeProvider.isDarkMode ? Colors.grey[900] : Colors.white,
+              color: themeProvider.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              boxShadow: themeProvider.isDarkMode
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
             ),
             child: Material(
               color: Colors.transparent,
@@ -239,8 +267,8 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: themeProvider.isDarkMode
-                                  ? themeProvider.theme.colorScheme.primary.withOpacity(0.2)
-                                  : themeProvider.theme.colorScheme.primary.withOpacity(0.1),
+                                  ? themeProvider.theme.colorScheme.primary.withValues(alpha: 0.2)
+                                  : themeProvider.theme.colorScheme.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
@@ -271,7 +299,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
                                   item.description,
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                                    color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -287,7 +315,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
                             formattedDate,
                             style: TextStyle(
                               fontSize: 13,
-                              color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                              color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                             ),
                           ),
                           Container(
@@ -295,7 +323,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
                             decoration: BoxDecoration(
                               color: themeProvider.isDarkMode
                                   ? Colors.grey[800]
-                                  : themeProvider.theme.colorScheme.primary.withOpacity(0.1),
+                                  : themeProvider.theme.colorScheme.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -303,7 +331,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: themeProvider.theme.colorScheme.onSurface.withOpacity(0.6),
+                                color: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.6),
                               ),
                             ),
                           ),
@@ -343,7 +371,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             padding: const EdgeInsets.only(right: 16),
             child: Container(
               decoration: BoxDecoration(
-                color: themeProvider.theme.colorScheme.primary.withOpacity(0.1),
+                color: themeProvider.theme.colorScheme.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: IconButton(
@@ -360,7 +388,7 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
         bottom: TabBar(
           controller: _tabController,
           labelColor: themeProvider.theme.colorScheme.onSurface,
-          unselectedLabelColor: themeProvider.theme.colorScheme.onSurface.withOpacity(0.7),
+          unselectedLabelColor: themeProvider.theme.colorScheme.onSurface.withValues(alpha: 0.7),
           indicatorColor: themeProvider.theme.colorScheme.primary,
           indicatorWeight: 3,
           labelStyle: const TextStyle(
@@ -372,9 +400,9 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             Tab(
               child: Directionality(
                 textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                child: Text(
+                child: const Text(
                   'دەرمانەکان',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Inter',
@@ -385,9 +413,9 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             Tab(
               child: Directionality(
                 textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                child: Text(
+                child: const Text(
                   'نەخۆشییەکان',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Inter',
@@ -398,9 +426,9 @@ class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStat
             Tab(
               child: Directionality(
                 textDirection: Provider.of<LanguageProvider>(context).textDirection,
-                child: Text(
+                child: const Text(
                   'زاراوەکان',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Inter',

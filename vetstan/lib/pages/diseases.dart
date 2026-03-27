@@ -1,13 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../services/sync_service.dart';
 import 'package:provider/provider.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
+import '../services/sync_service.dart';
+import '../services/encrypted_cache_service.dart';
+import '../services/connectivity_service.dart';
 import '../providers/theme_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/language_provider.dart';
 import '../models/disease.dart';
 import 'disease_details_page.dart';
-import '../utils/page_transition.dart';
+import 'package:vetstan/utils/page_transition.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/offline_error_state.dart';
 
 // Enum for disease classification
 enum DiseaseClass {
@@ -41,7 +47,7 @@ extension DiseaseClassExtension on DiseaseClass {
   Color get color {
     switch (this) {
       case DiseaseClass.viral:
-        return Colors.blue.shade700;
+        return const Color(0xFF1A3460);
       case DiseaseClass.bacterial:
         return Colors.red.shade700;
       case DiseaseClass.parasitic:
@@ -60,7 +66,7 @@ class DiseasesPage extends StatefulWidget {
   const DiseasesPage({Key? key}) : super(key: key);
 
   @override
-  _DiseasesPageState createState() => _DiseasesPageState();
+  State<DiseasesPage> createState() => _DiseasesPageState();
 }
 
 class _DiseasesPageState extends State<DiseasesPage> {
@@ -71,6 +77,7 @@ class _DiseasesPageState extends State<DiseasesPage> {
   List<Disease> _diseases = [];
   List<Disease> _filteredDiseases = [];
   bool _isLoading = true;
+  bool _isOffline = false;
 
   @override
   void initState() {
@@ -88,19 +95,57 @@ class _DiseasesPageState extends State<DiseasesPage> {
   }
 
   Future<void> _loadDiseasesData() async {
+    if (mounted) setState(() { _isLoading = true; _isOffline = false; });
+    final encCache = EncryptedCacheService();
+
     try {
-      final diseasesList = await _syncService.loadCategoryData<Disease>('diseases');
-      if (mounted) {
-        setState(() {
-          _diseases = diseasesList
-              .where((disease) => disease.name.isNotEmpty)
-              .toList();
-          _filteredDiseases = _diseases;
-          _isLoading = false;
-        });
+      final bool online = await ConnectivityService.isOnline();
+      if (mounted) setState(() => _isOffline = !online);
+
+      if (online) {
+        final diseasesList = await _syncService.loadCategoryData<Disease>('diseases');
+        final filtered = diseasesList.where((disease) => disease.name.isNotEmpty).toList();
+
+        // Save to encrypted cache for offline use
+        await encCache.saveDiseases(filtered.map((d) => d.toJson()).toList());
+
+        if (mounted) {
+          setState(() {
+            _diseases = filtered;
+            _filteredDiseases = _diseases;
+            _isLoading = false;
+          });
+        }
+      } else {
+        // Offline: load from encrypted cache
+        if (kDebugMode) debugPrint('[Diseases] Offline, loading from encrypted cache...');
+        final cached = await encCache.loadDiseases();
+        final diseases = cached.map((json) => Disease.fromJson(json)).where((d) => d.name.isNotEmpty).toList();
+
+        if (mounted) {
+          setState(() {
+            _diseases = diseases;
+            _filteredDiseases = _diseases;
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
-      print('Error loading diseases: $e');
+      if (kDebugMode) debugPrint('Error loading diseases: $e');
+      // Try encrypted cache as fallback
+      try {
+        final cached = await encCache.loadDiseases();
+        final diseases = cached.map((json) => Disease.fromJson(json)).where((d) => d.name.isNotEmpty).toList();
+        if (mounted && diseases.isNotEmpty) {
+          setState(() {
+            _diseases = diseases;
+            _filteredDiseases = _diseases;
+            _isLoading = false;
+          });
+          return;
+        }
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -184,7 +229,7 @@ class _DiseasesPageState extends State<DiseasesPage> {
                   ? null
                   : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 10,
                         offset: const Offset(0, 3),
                       ),
@@ -227,173 +272,163 @@ class _DiseasesPageState extends State<DiseasesPage> {
           ),
         ),
       ),
-      body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    color: themeProvider.isDarkMode
-                        ? themeProvider.theme.colorScheme.primary
-                        : Colors.blue,
-                  ),
-                  SizedBox(height: 16),
-                  StreamBuilder<String>(
-                    stream: _syncService.statusStream,
-                    builder: (context, snapshot) {
-                      return Text(
-                        snapshot.data ?? 'Loading diseases...',
-                        style: TextStyle(
-                          color: themeProvider.isDarkMode
-                              ? Colors.grey[400]
-                              : Colors.grey[600],
-                          fontSize: 16,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            )
-          : _filteredDiseases.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.sick_outlined,
-                        size: 80,
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[700]
-                            : Colors.grey[300],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'هیچ نەخۆشییەک نەدۆزرایەوە',
-                        style: TextStyle(
-                          color: themeProvider.isDarkMode
-                              ? Colors.grey[500]
-                              : Colors.grey[500],
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(
-                    physics: const BouncingScrollPhysics(),
-                  ),
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                    itemCount: _filteredDiseases.length,
-                    itemBuilder: (context, index) {
-                      final disease = _filteredDiseases[index];
-                      final isFavorite = favoritesProvider.isFavorite(disease);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: themeProvider.isDarkMode
-                              ? const Color(0xFF1E1E1E)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: themeProvider.isDarkMode
-                              ? null
-                              : [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
+      body: Column(
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          if (_isOffline) const OfflineBanner(),
+          Expanded(
+            child: _isLoading
+                ? Center(
+                    child: LoadingAnimationWidget.threeArchedCircle(
+                      color: themeProvider.theme.colorScheme.primary,
+                      size: 50,
+                    ),
+                  )
+                : _filteredDiseases.isEmpty
+                    ? (_isOffline
+                        ? OfflineErrorState(onRetry: _loadDiseasesData)
+                        : Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.sick_outlined,
+                                  size: 80,
+                                  color: themeProvider.isDarkMode
+                                      ? Colors.grey[700]
+                                      : Colors.grey[300],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'هیچ نەخۆشییەک نەدۆزرایەوە',
+                                  style: TextStyle(
+                                    color: themeProvider.isDarkMode
+                                        ? Colors.grey[500]
+                                        : Colors.grey[500],
+                                    fontSize: 18,
                                   ),
-                                ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.of(context).push(createRoute(
-                                DiseaseDetailsPage(disease: disease),
-                              ));
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  if (disease.imageUrl.isNotEmpty)
-                                    Container(
-                                      width: 60,
-                                      height: 60,
-                                      margin: const EdgeInsets.only(right: 16),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        image: DecorationImage(
-                                          image: NetworkImage(disease.imageUrl),
-                                          fit: BoxFit.cover,
+                                ),
+                              ],
+                            ),
+                          ))
+                    : RefreshIndicator(
+                        onRefresh: _loadDiseasesData,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                          itemCount: _filteredDiseases.length,
+                          itemBuilder: (context, index) {
+                            final disease = _filteredDiseases[index];
+                            final isFavorite = favoritesProvider.isFavorite(disease);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: themeProvider.isDarkMode
+                                    ? const Color(0xFF1E1E1E)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: themeProvider.isDarkMode
+                                    ? null
+                                    : [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.05),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 2),
                                         ),
-                                      ),
-                                    ),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      ],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.of(context).push(createRoute(
+                                      DiseaseDetailsPage(disease: disease),
+                                    ));
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
                                       children: [
-                                        Text(
-                                          disease.name,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: themeProvider.isDarkMode
-                                                ? Colors.white
-                                                : Colors.black87,
-                                          ),
-                                        ),
-                                        if (disease.category.isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            disease.category,
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: themeProvider.isDarkMode
-                                                  ? Colors.grey[500]
-                                                  : Colors.grey[600],
+                                        if (disease.imageUrl.isNotEmpty)
+                                          Container(
+                                            width: 60,
+                                            height: 60,
+                                            margin: const EdgeInsets.only(right: 16),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              image: DecorationImage(
+                                                image: NetworkImage(disease.imageUrl),
+                                                fit: BoxFit.cover,
+                                              ),
                                             ),
                                           ),
-                                        ],
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                disease.name,
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: themeProvider.isDarkMode
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                ),
+                                              ),
+                                              if (disease.category.isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  disease.category,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    color: themeProvider.isDarkMode
+                                                        ? Colors.grey[500]
+                                                        : Colors.grey[600],
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(
+                                            isFavorite
+                                                ? Icons.bookmark
+                                                : Icons.bookmark_border,
+                                            color: isFavorite
+                                                ? (themeProvider.isDarkMode
+                                                        ? const Color(0xFF4A7EB5)
+                                                        : const Color(0xFF1A3460))
+                                                : (themeProvider.isDarkMode
+                                                    ? Colors.grey[600]
+                                                    : Colors.grey[400]),
+                                          ),
+                                          onPressed: () {
+                                            if (isFavorite) {
+                                              favoritesProvider.removeFavorite(disease);
+                                            } else {
+                                              favoritesProvider.addFavorite(disease);
+                                            }
+                                          },
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  IconButton(
-                                    icon: Icon(
-                                      isFavorite
-                                          ? Icons.bookmark
-                                          : Icons.bookmark_border,
-                                      color: isFavorite
-                                          ? (themeProvider.isDarkMode
-                                              ? Colors.blue.shade300
-                                              : Colors.blue.shade700)
-                                          : (themeProvider.isDarkMode
-                                              ? Colors.grey[600]
-                                              : Colors.grey[400]),
-                                    ),
-                                    onPressed: () {
-                                      if (isFavorite) {
-                                        favoritesProvider.removeFavorite(disease);
-                                      } else {
-                                        favoritesProvider.addFavorite(disease);
-                                      }
-                                    },
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -415,7 +450,7 @@ class _DiseasesPageState extends State<DiseasesPage> {
           }
         } catch (e) {
           // Silent fail for background sync
-          print('Background sync error: $e');
+          if (kDebugMode) debugPrint('Background sync error: $e');
         }
       }
     });

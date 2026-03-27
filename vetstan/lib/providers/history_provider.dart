@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/history_item.dart';
+import '../models/drug.dart';
+import '../models/disease.dart';
+import '../models/word.dart';
 
 class HistoryProvider with ChangeNotifier {
   List<HistoryItem> _historyItems = [];
@@ -27,11 +30,28 @@ class HistoryProvider with ChangeNotifier {
           final itemsToLoad = historyJson.length > 10 ? historyJson.sublist(0, 10) : historyJson;
           
           _historyItems = itemsToLoad.map((item) {
+            dynamic data;
+            if (item['data'] != null) {
+              // Parse the complete object based on type
+              switch (item['type']) {
+                case 'drug':
+                  data = Drug.fromJson(item['data']);
+                  break;
+                case 'disease':
+                  data = Disease.fromJson(item['data']);
+                  break;
+                case 'terminology':
+                  data = Word.fromJson(item['data']);
+                  break;
+              }
+            }
+            
             return HistoryItem(
               title: item['title'],
               type: item['type'],
               timestamp: DateTime.parse(item['timestamp']),
               description: item['description'],
+              data: data,
             );
           }).toList();
           
@@ -41,11 +61,28 @@ class HistoryProvider with ChangeNotifier {
           if (historyJson.length > 10) {
             Future.delayed(const Duration(milliseconds: 1000), () {
               final remainingItems = historyJson.sublist(10).map((item) {
+                dynamic data;
+                if (item['data'] != null) {
+                  // Parse the complete object based on type
+                  switch (item['type']) {
+                    case 'drug':
+                      data = Drug.fromJson(item['data']);
+                      break;
+                    case 'disease':
+                      data = Disease.fromJson(item['data']);
+                      break;
+                    case 'terminology':
+                      data = Word.fromJson(item['data']);
+                      break;
+                  }
+                }
+                
                 return HistoryItem(
                   title: item['title'],
                   type: item['type'],
                   timestamp: DateTime.parse(item['timestamp']),
                   description: item['description'],
+                  data: data,
                 );
               }).toList();
               
@@ -55,30 +92,22 @@ class HistoryProvider with ChangeNotifier {
           }
         } catch (e) {
           // Handle parsing errors gracefully
-          print('Error loading history: $e');
         }
       }
     });
   }
 
   Future<void> _saveHistory() async {
-    if (_prefs == null) {
-      _prefs = await SharedPreferences.getInstance();
-    }
+    _prefs ??= await SharedPreferences.getInstance();
     final String historyString = json.encode(
-      _historyItems.map((item) => {
-        'title': item.title,
-        'type': item.type,
-        'timestamp': item.timestamp.toIso8601String(),
-        'description': item.description,
-      }).toList(),
+      _historyItems.map((item) => item.toJson()).toList(),
     );
     await _prefs?.setString(_historyKey, historyString);
   }
 
   List<HistoryItem> get historyItems => List.unmodifiable(_historyItems);
 
-  void addToHistory(String title, String type, String description) {
+  void addToHistory(String title, String type, String description, {dynamic data}) {
     // Remove existing item if it exists
     _historyItems.removeWhere((item) => 
       item.title == title && item.type == type
@@ -90,6 +119,7 @@ class HistoryProvider with ChangeNotifier {
       type: type,
       timestamp: DateTime.now(),
       description: description,
+      data: data,
     ));
 
     // Keep only the most recent items

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/favorites_provider.dart';
@@ -25,10 +26,11 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
   void initState() {
     super.initState();
     _initTts();
+    
     // Add to history after frame is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<HistoryProvider>(context, listen: false)
-          .addToHistory(widget.drug.name, 'drug', 'Viewed drug details');
+          .addToHistory(widget.drug.name, 'drug', 'Viewed drug details', data: widget.drug);
     });
   }
 
@@ -39,7 +41,9 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
       await flutterTts.setVolume(1.0);
       await flutterTts.setPitch(1.0);
     } catch (e) {
-      print("TTS initialization error: $e");
+      if (kDebugMode) {
+        debugPrint("TTS initialization error: $e");
+      }
     }
   }
 
@@ -54,7 +58,9 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
         setState(() => isPlaying = false);
       }
     } catch (e) {
-      print("TTS speak error: $e");
+      if (kDebugMode) {
+        debugPrint("TTS speak error: $e");
+      }
       setState(() => isPlaying = false);
     }
   }
@@ -81,9 +87,9 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: themeProvider.isDarkMode 
-                  ? themeProvider.theme.colorScheme.surface 
-                  : themeProvider.theme.colorScheme.primary.withOpacity(0.8),
-                borderRadius: BorderRadius.only(
+                  ? const Color(0xFF1E1E1E)
+                  : themeProvider.theme.colorScheme.primary.withValues(alpha: 0.8),
+                borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
                 ),
@@ -91,12 +97,12 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.only(top: 40, left: 16, right: 16),
+                    padding: const EdgeInsets.only(top: 40, left: 16, right: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.arrow_back, color: themeProvider.isDarkMode ? Colors.white : Colors.white),
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
@@ -107,7 +113,7 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
                     Container(
                       width: 140,
                       height: 140,
-                      margin: EdgeInsets.only(top: 20, bottom: 16),
+                      margin: const EdgeInsets.only(top: 20, bottom: 16),
                       decoration: BoxDecoration(
                         color: themeProvider.isDarkMode 
                           ? Colors.grey[800] 
@@ -117,9 +123,9 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
                           ? null 
                           : [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 15,
-                                offset: Offset(0, 5),
+                                offset: const Offset(0, 5),
                               ),
                             ],
                       ),
@@ -134,13 +140,11 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
 
                   // Drug Name
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     child: Text(
                       widget.drug.name,
-                      style: TextStyle(
-                        color: themeProvider.isDarkMode 
-                          ? Colors.white 
-                          : Colors.white,
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
@@ -148,14 +152,39 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
                     ),
                   ),
                   
+                  // Category (if available) - placed under name
+                  if (widget.drug.drugClass.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: themeProvider.isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        widget.drug.drugClass,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  
                   // Action buttons
                   Container(
-                    margin: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: themeProvider.isDarkMode 
-                        ? Colors.grey[800]?.withOpacity(0.5) 
-                        : Colors.white.withOpacity(0.15),
+                        ? const Color(0xFF2C2C2C)
+                        : Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -167,10 +196,15 @@ class _DrugDetailsPageState extends State<DrugDetailsPage> {
                             String content = '''${widget.drug.name}
 ${widget.drug.usage}
 ${widget.drug.sideEffect}
-${widget.drug.otherInfo}''';
+${widget.drug.otherInfo}
+${widget.drug.withdrawalTimes.isNotEmpty ? 'Withdrawal Times: ${widget.drug.withdrawalTimes}' : ''}
+${widget.drug.drugInteractions.isNotEmpty ? 'Drug Interactions: ${widget.drug.drugInteractions}' : ''}
+${widget.drug.contraindications.isNotEmpty ? 'Contraindications: ${widget.drug.contraindications}' : ''}
+${widget.drug.speciesDosages.isNotEmpty ? 'Species Dosages: ${widget.drug.speciesDosages}' : ''}
+${widget.drug.tradeNames.isNotEmpty ? 'Trade Names: ${widget.drug.tradeNames}' : ''}''';
                             Clipboard.setData(ClipboardData(text: content.trim()));
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Copied to clipboard')),
+                              const SnackBar(content: Text('Copied to clipboard')),
                             );
                           },
                           label: 'کۆپی',
@@ -196,7 +230,12 @@ ${widget.drug.otherInfo}''';
                             String content = '''${widget.drug.name}
 ${widget.drug.usage}
 ${widget.drug.sideEffect}
-${widget.drug.otherInfo}''';
+${widget.drug.otherInfo}
+${widget.drug.withdrawalTimes.isNotEmpty ? 'Withdrawal Times: ${widget.drug.withdrawalTimes}' : ''}
+${widget.drug.drugInteractions.isNotEmpty ? 'Drug Interactions: ${widget.drug.drugInteractions}' : ''}
+${widget.drug.contraindications.isNotEmpty ? 'Contraindications: ${widget.drug.contraindications}' : ''}
+${widget.drug.speciesDosages.isNotEmpty ? 'Species Dosages: ${widget.drug.speciesDosages}' : ''}
+${widget.drug.tradeNames.isNotEmpty ? 'Trade Names: ${widget.drug.tradeNames}' : ''}''';
                             Share.share(content);
                           },
                           label: 'هاوبەشکردن',
@@ -208,7 +247,12 @@ ${widget.drug.otherInfo}''';
                             String content = '''${widget.drug.name}
 ${widget.drug.usage}
 ${widget.drug.sideEffect}
-${widget.drug.otherInfo}''';
+${widget.drug.otherInfo}
+${widget.drug.withdrawalTimes.isNotEmpty ? 'Withdrawal Times: ${widget.drug.withdrawalTimes}' : ''}
+${widget.drug.drugInteractions.isNotEmpty ? 'Drug Interactions: ${widget.drug.drugInteractions}' : ''}
+${widget.drug.contraindications.isNotEmpty ? 'Contraindications: ${widget.drug.contraindications}' : ''}
+${widget.drug.speciesDosages.isNotEmpty ? 'Species Dosages: ${widget.drug.speciesDosages}' : ''}
+${widget.drug.tradeNames.isNotEmpty ? 'Trade Names: ${widget.drug.tradeNames}' : ''}''';
                             _speak(content.trim());
                           },
                           label: isPlaying 
@@ -219,45 +263,157 @@ ${widget.drug.otherInfo}''';
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
             
-            // Content sections
+            // Content sections - ordered to match toJson() structure
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  _buildInfoSection(
-                    'بەکارهێنان',
-                    widget.drug.usage,
-                    Icons.medical_services,
-                    themeProvider.isDarkMode 
-                      ? Colors.blue.shade300 
-                      : Colors.blue.shade700,
-                    themeProvider,
-                  ),
-                  SizedBox(height: 16),
-                  _buildInfoSection(
-                    'کاریگەری لاوەکی',
-                    widget.drug.sideEffect,
-                    Icons.warning_amber,
-                    themeProvider.isDarkMode 
-                      ? Colors.orange.shade300 
-                      : Colors.orange.shade700,
-                    themeProvider,
-                  ),
-                  SizedBox(height: 16),
-                  _buildInfoSection(
-                    'زانیاری زیاتر',
-                    widget.drug.otherInfo,
-                    Icons.info,
-                    themeProvider.isDarkMode 
-                      ? Colors.green.shade300 
-                      : Colors.green.shade700,
-                    themeProvider,
-                  ),
+                  // 1. Category (if available)
+                  if (widget.drug.category.isNotEmpty) ...[
+                    _buildInfoSection(
+                      'جۆر',
+                      widget.drug.category,
+                      Icons.category,
+                      themeProvider.isDarkMode 
+                        ? Colors.cyan.shade300 
+                        : Colors.cyan.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 2. Trade Names
+                  if (widget.drug.tradeNames.isNotEmpty) ...[  
+                    _buildInfoSection(
+                      'ناوی بازرگانی',
+                      widget.drug.tradeNames,
+                      Icons.business,
+                      themeProvider.isDarkMode 
+                        ? Colors.amber.shade300 
+                        : Colors.amber.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 4. Description
+                  if (widget.drug.description.isNotEmpty) ...[
+                    _buildInfoSection(
+                      'وەسف',
+                      widget.drug.description,
+                      Icons.description,
+                      themeProvider.isDarkMode 
+                        ? const Color(0xFF4A7EB5) 
+                        : const Color(0xFF1A3460),
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 5. Usage
+                  if (widget.drug.usage.isNotEmpty) ...[
+                    _buildInfoSection(
+                      'بەکارهێنان',
+                      widget.drug.usage,
+                      Icons.medical_services,
+                      themeProvider.isDarkMode 
+                        ? Colors.green.shade300 
+                        : Colors.green.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 6. Side Effect
+                  if (widget.drug.sideEffect.isNotEmpty) ...[
+                    _buildInfoSection(
+                      'کاریگەری لاوەکی',
+                      widget.drug.sideEffect,
+                      Icons.warning_amber,
+                      themeProvider.isDarkMode 
+                        ? Colors.orange.shade300 
+                        : Colors.orange.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 7. Contraindications
+                  if (widget.drug.contraindications.isNotEmpty) ...[
+                    _buildInfoSection(
+                      'ئەو حاڵەتانەی کە نابێت بەکاربهێنرێت',
+                      widget.drug.contraindications,
+                      Icons.block,
+                      themeProvider.isDarkMode 
+                        ? Colors.pink.shade300 
+                        : Colors.pink.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 8. Drug Interactions
+                  if (widget.drug.drugInteractions.isNotEmpty) ...[  
+                    _buildInfoSection(
+                      'ئەو دەرمانانەی نابێت لەگەڵی بەکاربهێنرێت',
+                      widget.drug.drugInteractions,
+                      Icons.warning_rounded,
+                      themeProvider.isDarkMode 
+                        ? Colors.red.shade300 
+                        : Colors.red.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 9. Withdrawal Times
+                  if (widget.drug.withdrawalTimes.isNotEmpty) ...[  
+                    _buildInfoSection(
+                      'کاتی پێویست بۆ نەمانی کاریگەری ',
+                      widget.drug.withdrawalTimes,
+                      Icons.schedule,
+                      themeProvider.isDarkMode 
+                        ? Colors.indigo.shade300 
+                        : Colors.indigo.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 10. Species Dosages
+                  if (widget.drug.speciesDosages.isNotEmpty) ...[  
+                    _buildInfoSection(
+                      'دۆزی دەرمان بەپێی ئاژەڵەکان',
+                      widget.drug.speciesDosages,
+                      Icons.pets,
+                      themeProvider.isDarkMode 
+                        ? Colors.teal.shade300 
+                        : Colors.teal.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 11. Other Info
+                  if (widget.drug.otherInfo.isNotEmpty) ...[  
+                    _buildInfoSection(
+                      'زانیاری زیاتر',
+                      widget.drug.otherInfo,
+                      Icons.info,
+                      themeProvider.isDarkMode 
+                        ? Colors.lightBlue.shade300 
+                        : Colors.lightBlue.shade700,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  // 12. Kurdish (if available)
+                  if (widget.drug.kurdish.isNotEmpty)
+                    _buildInfoSection(
+                      'کوردی',
+                      widget.drug.kurdish,
+                      Icons.language,
+                      themeProvider.isDarkMode 
+                        ? Colors.deepPurple.shade300 
+                        : Colors.deepPurple.shade700,
+                      themeProvider,
+                    ),
                 ],
               ),
             ),
@@ -277,24 +433,20 @@ ${widget.drug.otherInfo}''';
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon, 
-              color: themeProvider.isDarkMode 
-                ? Colors.white 
-                : Colors.white, 
+              color: Colors.white, 
               size: 24
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(
-                color: themeProvider.isDarkMode 
-                  ? Colors.white 
-                  : Colors.white,
+              style: const TextStyle(
+                color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -316,66 +468,71 @@ ${widget.drug.otherInfo}''';
     
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: themeProvider.isDarkMode 
-          ? Color(0xFF1E1E1E) 
+          ? const Color(0xFF1E1E1E) 
           : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: themeProvider.isDarkMode 
           ? null 
           : [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: languageProvider.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
+          // Section title
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: themeProvider.isDarkMode 
+                    ? Colors.white 
+                    : Colors.black87,
+                  height: 1.4,
+                  fontFamily: 'Inter',
                 ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.isDarkMode 
-                        ? Colors.white 
-                        : color,
-                    ),
-                  ),
-                ),
-              ],
+                textAlign: TextAlign.right,
+              ),
             ),
           ),
-          SizedBox(height: 16),
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: Text(
-              content,
-              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-              style: TextStyle(
-                fontSize: 16,
-                color: themeProvider.isDarkMode 
-                  ? Colors.grey[400] 
-                  : Colors.black87,
-                height: 1.6,
+          const SizedBox(height: 8),
+          // Separator line under title
+          Container(
+            width: double.infinity,
+            height: 1,
+            color: themeProvider.isDarkMode 
+              ? Colors.grey[600] 
+              : Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          // Section content
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                content,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: themeProvider.isDarkMode 
+                    ? Colors.grey[300] 
+                    : Colors.black87,
+                  height: 1.6,
+                  fontFamily: 'Inter',
+                ),
+                textAlign: TextAlign.right,
               ),
             ),
           ),

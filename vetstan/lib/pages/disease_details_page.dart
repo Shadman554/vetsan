@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -29,7 +30,7 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
     // Add to history after frame is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<HistoryProvider>(context, listen: false)
-          .addDiseaseToHistory(widget.disease.name, 'Viewed disease details');
+          .addToHistory(widget.disease.name, 'disease', 'Viewed disease details', data: widget.disease);
     });
   }
 
@@ -40,7 +41,7 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
       await flutterTts.setVolume(1.0);
       await flutterTts.setPitch(1.0);
     } catch (e) {
-      print("TTS initialization error: $e");
+      if (kDebugMode) debugPrint("TTS initialization error: $e");
     }
   }
 
@@ -55,7 +56,7 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
         setState(() => isPlaying = false);
       }
     } catch (e) {
-      print("TTS speak error: $e");
+      if (kDebugMode) debugPrint("TTS speak error: $e");
       setState(() => isPlaying = false);
     }
   }
@@ -82,9 +83,9 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: themeProvider.isDarkMode 
-                  ? themeProvider.theme.colorScheme.surface 
-                  : themeProvider.theme.colorScheme.primary.withOpacity(0.8),
-                borderRadius: BorderRadius.only(
+                  ? const Color(0xFF1E1E1E)
+                  : themeProvider.theme.colorScheme.primary.withValues(alpha: 0.8),
+                borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
                 ),
@@ -92,12 +93,12 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
               child: Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.only(top: 40, left: 16, right: 16),
+                    padding: const EdgeInsets.only(top: 40, left: 16, right: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.arrow_back, color: themeProvider.isDarkMode ? Colors.white : Colors.white),
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
@@ -109,7 +110,7 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
                     Container(
                       width: 140,
                       height: 140,
-                      margin: EdgeInsets.only(top: 20, bottom: 16),
+                      margin: const EdgeInsets.only(top: 20, bottom: 16),
                       decoration: BoxDecoration(
                         color: themeProvider.isDarkMode 
                           ? Colors.grey[800] 
@@ -119,9 +120,9 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
                           ? null 
                           : [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 15,
-                                offset: Offset(0, 5),
+                                offset: const Offset(0, 5),
                               ),
                             ],
                       ),
@@ -136,7 +137,7 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
 
                   // Disease Name
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     child: Directionality(
                       textDirection: languageProvider.textDirection,
                       child: Text(
@@ -155,12 +156,12 @@ class _DiseaseDetailsPageState extends State<DiseaseDetailsPage> {
                   
                   // Action buttons
                   Container(
-                    margin: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: themeProvider.isDarkMode 
-                        ? Colors.grey[800]?.withOpacity(0.5) 
-                        : Colors.white.withOpacity(0.15),
+                        ? const Color(0xFF2C2C2C)
+                        : Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -176,7 +177,7 @@ ${widget.disease.symptoms}
 ${widget.disease.control}''';
                             Clipboard.setData(ClipboardData(text: content.trim()));
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Copied to clipboard')),
+                              const SnackBar(content: Text('Copied to clipboard')),
                             );
                           },
                           label: 'کۆپی',
@@ -226,26 +227,27 @@ ${widget.disease.control}''';
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
             
             // Content sections
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  if (widget.disease.kurdish.isNotEmpty)
+                  if (widget.disease.kurdish.isNotEmpty) ...[
                     _buildInfoSection(
                       'کوردی',
                       widget.disease.kurdish,
                       Icons.translate,
-                      Colors.blue,
+                      themeProvider.isDarkMode ? const Color(0xFF4A7EB5) : const Color(0xFF1A3460),
                       themeProvider,
                     ),
-                  SizedBox(height: 16),
-                  if (widget.disease.cause.isNotEmpty)
+                    const SizedBox(height: 16),
+                  ],
+                  if (widget.disease.cause.isNotEmpty) ...[
                     _buildInfoSection(
                       'هۆکار',
                       widget.disease.cause,
@@ -253,15 +255,18 @@ ${widget.disease.control}''';
                       Colors.red,
                       themeProvider,
                     ),
-                  SizedBox(height: 16),
-                  _buildInfoSection(
-                    'نیشانەکان',
-                    widget.disease.symptoms,
-                    Icons.medical_information,
-                    Colors.orange,
-                    themeProvider,
-                  ),
-                  SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
+                  if (widget.disease.symptoms.isNotEmpty) ...[
+                    _buildInfoSection(
+                      'نیشانەکان',
+                      widget.disease.symptoms,
+                      Icons.medical_information,
+                      Colors.orange,
+                      themeProvider,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (widget.disease.control.isNotEmpty)
                     _buildInfoSection(
                       'کۆنترۆڵ',
@@ -270,7 +275,6 @@ ${widget.disease.control}''';
                       Colors.green,
                       themeProvider,
                     ),
-                  SizedBox(height: 24),
                 ],
               ),
             ),
@@ -290,7 +294,7 @@ ${widget.disease.control}''';
       onTap: onTap,
       borderRadius: BorderRadius.circular(15),
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -301,7 +305,7 @@ ${widget.disease.control}''';
                 : Colors.white, 
               size: 24
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
@@ -329,67 +333,71 @@ ${widget.disease.control}''';
   
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: themeProvider.isDarkMode 
-          ? Color(0xFF1E1E1E) 
+          ? const Color(0xFF1E1E1E) 
           : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: themeProvider.isDarkMode 
           ? null 
           : [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
       ),
       child: Column(
         crossAxisAlignment: languageProvider.isRTL ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
+          // Section title
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: themeProvider.isDarkMode 
+                    ? Colors.white 
+                    : Colors.black87,
+                  height: 1.4,
+                  fontFamily: 'Inter',
                 ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: themeProvider.isDarkMode 
-                        ? Colors.white 
-                        : color,
-                    ),
-                  ),
-                ),
-              ],
+                textAlign: TextAlign.right,
+              ),
             ),
           ),
-          SizedBox(height: 16),
-          Directionality(
-            textDirection: languageProvider.textDirection,
-            child: Text(
-              content,
-              textDirection: languageProvider.textDirection,
-              textAlign: languageProvider.isRTL ? TextAlign.right : TextAlign.left,
-              style: TextStyle(
-                fontSize: 16,
-                color: themeProvider.isDarkMode 
-                  ? Colors.grey[400] 
-                  : Colors.black87,
-                height: 1.6,
+          const SizedBox(height: 8),
+          // Separator line under title
+          Container(
+            width: double.infinity,
+            height: 1,
+            color: themeProvider.isDarkMode 
+              ? Colors.grey[600] 
+              : Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          // Section content
+          SizedBox(
+            width: double.infinity,
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text(
+                content,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: themeProvider.isDarkMode 
+                    ? Colors.grey[300] 
+                    : Colors.black87,
+                  height: 1.6,
+                  fontFamily: 'Inter',
+                ),
+                textAlign: TextAlign.right,
               ),
             ),
           ),

@@ -1,9 +1,19 @@
 
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import '../database/database_helper.dart';
 import '../services/api_service.dart';
 import '../services/cache_service.dart';
+import '../services/encrypted_cache_service.dart';
+import '../services/connectivity_service.dart';
+import '../models/word.dart';
+import '../models/disease.dart';
+import '../models/drug.dart';
+import '../models/book.dart';
+import '../models/note.dart';
+import '../models/instrument.dart';
+import '../models/normal_range.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
@@ -16,11 +26,62 @@ class SyncService {
   final ApiService _apiService = ApiService();
   final DatabaseHelper _database = DatabaseHelper();
   final CacheService _cacheService = CacheService();
+  final EncryptedCacheService _encCache = EncryptedCacheService();
   final StreamController<bool> _syncController = StreamController<bool>.broadcast();
   final StreamController<String> _statusController = StreamController<String>.broadcast();
 
   Stream<bool> get syncStream => _syncController.stream;
   Stream<String> get statusStream => _statusController.stream;
+
+  // Update cached dictionary with new terms
+  Future<void> updateCachedDictionary(List<Word> updatedTerminology) async {
+    await _cacheService.cacheDictionary(updatedTerminology);
+  }
+
+  // Force refresh data from API (for pull-to-refresh)
+  Future<List<T>> forceRefreshCategoryData<T>(String dataType) async {
+    try {
+      // Fetch fresh data from API
+      List<T> data = await _fetchDataByType<T>(dataType);
+      
+      // Cache the fresh data
+      await _cacheDataByType(dataType, data);
+      
+      // Also save to encrypted cache for secure offline access (non-critical)
+      try {
+        await _saveToEncryptedCache(dataType, data);
+      } catch (e) {
+        developer.log('[SyncService] Non-critical: encrypted cache save failed for $dataType: $e');
+      }
+      
+      // Store in SQLite for backward compatibility (non-critical)
+      try {
+        await _storeSQLiteDataByType(dataType, data);
+      } catch (e) {
+        developer.log('[SyncService] Non-critical: SQLite save failed for $dataType: $e');
+      }
+
+      // Update sync timestamp
+      await _cacheService.setLastSyncTime(dataType, DateTime.now().toIso8601String());
+      
+      return data;
+    } catch (e) {
+      developer.log('Error force refreshing $dataType: $e');
+      
+      // Try encrypted cache first
+      try {
+        final encData = await _loadFromEncryptedCache<T>(dataType);
+        if (encData.isNotEmpty) return encData;
+      } catch (_) {}
+      
+      // Return regular cached data if available
+      if (_cacheService.hasCachedData(dataType)) {
+        return _getCachedDataByType<T>(dataType);
+      }
+      
+      rethrow;
+    }
+  }
 
   Future<void> initializeApp() async {
     try {
@@ -30,7 +91,6 @@ class SyncService {
         await _cacheService.setFirstInstall(false);
       }
     } catch (e) {
-      print('Initialization error: $e');
       // Don't add status updates during silent initialization
       rethrow;
     }
@@ -44,31 +104,72 @@ class SyncService {
         return _getCachedDataByType<T>(dataType);
       }
 
+      // Check connectivity before fetching (non-blocking: default to online on failure)
+      bool online = true;
+      try {
+        online = await ConnectivityService.isOnline();
+      } catch (_) {
+        online = true; // Assume online if check fails
+      }
+
+      if (!online) {
+        // Offline: try encrypted cache first
+        try {
+          final encData = await _loadFromEncryptedCache<T>(dataType);
+          if (encData.isNotEmpty) {
+            developer.log('[SyncService] Loaded $dataType from encrypted cache (offline)');
+            return encData;
+          }
+        } catch (_) {}
+        // Fall back to regular cache
+        if (_cacheService.hasCachedData(dataType)) {
+          return _getCachedDataByType<T>(dataType);
+        }
+        throw Exception('No internet and no cached data for $dataType');
+      }
+
       // First time loading this category - show loading and fetch from API
       _syncController.add(true);
-      _statusController.add('Loading ${dataType}...');
+      _statusController.add('Loading $dataType...');
 
       List<T> data = await _fetchDataByType<T>(dataType);
       
-      // Cache the data
+      // Cache the data in memory (critical - must succeed)
       await _cacheDataByType(dataType, data);
       
-      // Store in SQLite for backward compatibility
-      await _storeSQLiteDataByType(dataType, data);
+      // Save to encrypted cache in background (non-critical)
+      try {
+        await _saveToEncryptedCache(dataType, data);
+      } catch (e) {
+        developer.log('[SyncService] Non-critical: encrypted cache save failed for $dataType: $e');
+      }
+      
+      // Store in SQLite for backward compatibility (non-critical)
+      try {
+        await _storeSQLiteDataByType(dataType, data);
+      } catch (e) {
+        developer.log('[SyncService] Non-critical: SQLite save failed for $dataType: $e');
+      }
 
       // Update sync timestamp
       await _cacheService.setLastSyncTime(dataType, DateTime.now().toIso8601String());
 
       _syncController.add(false);
-      _statusController.add('${dataType} loaded successfully');
+      _statusController.add('$dataType loaded successfully');
       
       return data;
     } catch (e) {
-      print('Error loading $dataType: $e');
+      developer.log('Error loading $dataType: $e');
       _syncController.add(false);
       _statusController.add('Error loading $dataType');
       
-      // Return cached data if available
+      // Try encrypted cache first (more secure)
+      try {
+        final encData = await _loadFromEncryptedCache<T>(dataType);
+        if (encData.isNotEmpty) return encData;
+      } catch (_) {}
+
+      // Return regular cached data if available
       if (_cacheService.hasCachedData(dataType)) {
         return _getCachedDataByType<T>(dataType);
       }
@@ -90,24 +191,24 @@ class SyncService {
       List<dynamic> updates = await _fetchUpdatesForType(dataType, lastSync);
       
       if (updates.isNotEmpty) {
-        _statusController.add('Syncing ${updates.length} new ${dataType} entries...');
+        _statusController.add('Syncing ${updates.length} new $dataType entries...');
         await _mergeUpdatesForType(dataType, updates);
         await _cacheService.setLastSyncTime(dataType, DateTime.now().toIso8601String());
         await _updateSQLiteFromCacheForType(dataType);
         
-        _statusController.add('Found ${updates.length} new ${dataType} entries');
+        _statusController.add('Found ${updates.length} new $dataType entries');
         return true;
       }
       
       return false;
     } catch (e) {
-      print('Error checking updates for $dataType: $e');
+      developer.log('Error checking updates for $dataType: $e');
       // If checking updates fails, try to force reload all data
       try {
         await forceCategorySync(dataType);
         return true;
       } catch (e2) {
-        print('Error in force category sync: $e2');
+        developer.log('Error in force category sync: $e2');
         return false;
       }
     }
@@ -116,7 +217,7 @@ class SyncService {
   // Force sync for a specific category
   Future<void> forceCategorySync(String dataType) async {
     try {
-      _statusController.add('Force syncing ${dataType}...');
+      _statusController.add('Force syncing $dataType...');
       
       // Clear cached data for this category
       await _cacheService.clearCategoryCache(dataType);
@@ -127,16 +228,27 @@ class SyncService {
       // Cache the data
       await _cacheDataByType(dataType, data);
       
-      // Store in SQLite
-      await _storeSQLiteDataByType(dataType, data);
+      // Also save to encrypted cache for secure offline access (non-critical)
+      try {
+        await _saveToEncryptedCache(dataType, data);
+      } catch (e) {
+        developer.log('[SyncService] Non-critical: encrypted cache save failed for $dataType: $e');
+      }
+      
+      // Store in SQLite (non-critical)
+      try {
+        await _storeSQLiteDataByType(dataType, data);
+      } catch (e) {
+        developer.log('[SyncService] Non-critical: SQLite save failed for $dataType: $e');
+      }
 
       // Update sync timestamp
       await _cacheService.setLastSyncTime(dataType, DateTime.now().toIso8601String());
       
-      _statusController.add('${dataType} force sync completed');
+      _statusController.add('$dataType force sync completed');
     } catch (e) {
-      print('Error in force category sync for $dataType: $e');
-      _statusController.add('Error syncing ${dataType}');
+      developer.log('Error in force category sync for $dataType: $e');
+      _statusController.add('Error syncing $dataType');
       rethrow;
     }
   }
@@ -167,7 +279,7 @@ class SyncService {
       
       return hasUpdates;
     } catch (e) {
-      print('Error checking all updates: $e');
+      developer.log('Error checking all updates: $e');
       _statusController.add('Error checking for updates');
       return false;
     }
@@ -186,10 +298,10 @@ class SyncService {
         checkForCategoryUpdates(dataType).then((hasUpdates) {
           if (hasUpdates) {
             // Notify that new data is available
-            _statusController.add('New ${dataType} data available');
+            _statusController.add('New $dataType data available');
           }
         }).catchError((e) {
-          print('Background update check failed for $dataType: $e');
+          developer.log('Background update check failed for $dataType: $e');
         });
         
         return data;
@@ -198,7 +310,7 @@ class SyncService {
         return await loadCategoryData<T>(dataType);
       }
     } catch (e) {
-      print('Error loading $dataType with auto-sync: $e');
+      developer.log('Error loading $dataType with auto-sync: $e');
       rethrow;
     }
   }
@@ -216,6 +328,10 @@ class SyncService {
         return (await _apiService.fetchAllBooks()).cast<T>();
       case 'notes':
         return (await _apiService.fetchAllNotes()).cast<T>();
+      case 'instruments':
+        return (await _apiService.fetchAllInstruments()).cast<T>();
+      case 'normal_ranges':
+        return (await _apiService.fetchAllNormalRanges()).cast<T>();
       default:
         throw Exception('Unknown data type: $dataType');
     }
@@ -235,6 +351,12 @@ class SyncService {
       case 'notes':
         // Currently API doesn’t expose incremental updates for notes. Return empty list.
         return [];
+      case 'instruments':
+        // Currently API doesn't expose incremental updates for instruments. Return empty list.
+        return [];
+      case 'normal_ranges':
+        // Currently API doesn't expose incremental updates for normal ranges. Return empty list.
+        return [];
       default:
         throw Exception('Unknown data type: $dataType');
     }
@@ -253,6 +375,10 @@ class SyncService {
         return _cacheService.getCachedBooks().cast<T>();
       case 'notes':
         return _cacheService.getCachedNotes().cast<T>();
+      case 'instruments':
+        return _cacheService.getCachedInstruments().cast<T>();
+      case 'normal_ranges':
+        return _cacheService.getCachedNormalRanges().cast<T>();
       default:
         throw Exception('Unknown data type: $dataType');
     }
@@ -276,6 +402,12 @@ class SyncService {
       case 'notes':
         await _cacheService.cacheNotes(data.cast());
         break;
+      case 'instruments':
+        await _cacheService.cacheInstruments(data.cast());
+        break;
+      case 'normal_ranges':
+        await _cacheService.cacheNormalRanges(data.cast());
+        break;
     }
   }
 
@@ -297,6 +429,79 @@ class SyncService {
       case 'notes':
         await _cacheService.mergeNoteUpdates(updates.cast());
         break;
+      case 'instruments':
+        await _cacheService.mergeInstrumentUpdates(updates.cast());
+        break;
+      case 'normal_ranges':
+        await _cacheService.mergeNormalRangeUpdates(updates.cast());
+        break;
+    }
+  }
+
+  // Save data to encrypted cache by type
+  Future<void> _saveToEncryptedCache(String dataType, List<dynamic> data) async {
+    try {
+      final jsonList = data.map((item) => item.toJson() as Map<String, dynamic>).toList();
+      switch (dataType) {
+        case 'dictionary':
+          await _encCache.saveTerminology(jsonList);
+          break;
+        case 'diseases':
+          await _encCache.saveDiseases(jsonList);
+          break;
+        case 'drugs':
+          await _encCache.saveDrugs(jsonList);
+          break;
+        case 'books':
+          await _encCache.saveBooks(jsonList);
+          break;
+        case 'notes':
+          await _encCache.saveNotes(jsonList);
+          break;
+        case 'instruments':
+          await _encCache.saveInstruments(jsonList);
+          break;
+        case 'normal_ranges':
+          await _encCache.saveNormalRanges(jsonList);
+          break;
+      }
+    } catch (e) {
+      developer.log('[SyncService] Error saving to encrypted cache ($dataType): $e');
+    }
+  }
+
+  // Load data from encrypted cache by type
+  Future<List<T>> _loadFromEncryptedCache<T>(String dataType) async {
+    try {
+      List<Map<String, dynamic>> jsonList;
+      switch (dataType) {
+        case 'dictionary':
+          jsonList = await _encCache.loadTerminology();
+          return jsonList.map((json) => Word.fromJson(json) as T).toList();
+        case 'diseases':
+          jsonList = await _encCache.loadDiseases();
+          return jsonList.map((json) => Disease.fromJson(json) as T).toList();
+        case 'drugs':
+          jsonList = await _encCache.loadDrugs();
+          return jsonList.map((json) => Drug.fromJson(json) as T).toList();
+        case 'books':
+          jsonList = await _encCache.loadBooks();
+          return jsonList.map((json) => Book.fromJson(json) as T).toList();
+        case 'notes':
+          jsonList = await _encCache.loadNotes();
+          return jsonList.map((json) => Note.fromJson(json) as T).toList();
+        case 'instruments':
+          jsonList = await _encCache.loadInstruments();
+          return jsonList.map((json) => Instrument.fromJson(json) as T).toList();
+        case 'normal_ranges':
+          jsonList = await _encCache.loadNormalRanges();
+          return jsonList.map((json) => NormalRange.fromJson(json) as T).toList();
+        default:
+          return [];
+      }
+    } catch (e) {
+      developer.log('[SyncService] Error loading from encrypted cache ($dataType): $e');
+      return [];
     }
   }
 
@@ -393,7 +598,7 @@ class SyncService {
 
       _syncController.add(false);
     } catch (e) {
-      print('Full sync failed: $e');
+      developer.log('Full sync failed: $e');
       _syncController.add(false);
       rethrow;
     }

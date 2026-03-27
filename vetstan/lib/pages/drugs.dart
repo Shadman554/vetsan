@@ -1,13 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../services/sync_service.dart';
 import 'package:provider/provider.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import '../providers/theme_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/history_provider.dart';
 import '../models/drug.dart';
+import '../services/sync_service.dart';
+import '../services/encrypted_cache_service.dart';
+import '../services/connectivity_service.dart';
 import 'drug_details_page.dart';
-import '../utils/page_transition.dart';
+import 'package:vetstan/utils/page_transition.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/offline_error_state.dart';
 
 // Enum for drug classification
 enum DrugClass {
@@ -41,7 +47,7 @@ extension DrugClassExtension on DrugClass {
   Color get color {
     switch (this) {
       case DrugClass.antibiotic:
-        return Colors.blue.shade700;
+        return const Color(0xFF1A3460);
       case DrugClass.painkiller:
         return Colors.red.shade700;
       case DrugClass.antiviral:
@@ -60,7 +66,7 @@ class DrugsPage extends StatefulWidget {
   const DrugsPage({Key? key}) : super(key: key);
 
   @override
-  _DrugsPageState createState() => _DrugsPageState();
+  State<DrugsPage> createState() => _DrugsPageState();
 }
 
 class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMixin {
@@ -71,6 +77,7 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
   List<Drug> _drugs = [];
   List<Drug> _filteredDrugs = [];
   bool _isLoading = true;
+  bool _isOffline = false;
   Set<String> _availableClasses = <String>{};
   String? _selectedClass;
 
@@ -91,113 +98,241 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
 
   void _showFilterOptions(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isDarkMode = themeProvider.isDarkMode;
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: themeProvider.isDarkMode
-                ? Color(0xFF1E1E1E)
-                : Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: EdgeInsets.only(top: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
               ),
-              Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Filter by Class',
+              decoration: BoxDecoration(
+                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Text(
+                      'فلتەرکردن',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: themeProvider.isDarkMode ? Colors.white : Colors.black87,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                  
+                  const Divider(height: 1),
+                  
+                  // Scrollable content
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Class filter section
+                          Text(
+                            'پۆلەکان',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: isDarkMode ? Colors.white : Colors.black87,
+                            ),
+                            textDirection: TextDirection.ltr,
+                          ),
+                          const SizedBox(height: 12),
+                          
+                          // Class chips
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _buildFilterChip(
+                                'هەموو',
+                                Icons.apps_rounded,
+                                themeProvider.theme.colorScheme.primary,
+                                _selectedClass == null,
+                                () {
+                                  setModalState(() => _selectedClass = null);
+                                },
+                                isDarkMode,
+                              ),
+                              ..._availableClasses.map((classValue) => _buildFilterChip(
+                                    classValue,
+                                    Icons.medical_services,
+                                    themeProvider.theme.colorScheme.primary,
+                                    _selectedClass == classValue,
+                                    () {
+                                      setModalState(() => _selectedClass = classValue);
+                                    },
+                                    isDarkMode,
+                                  )),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(height: 16),
-                    _buildFilterOption(
-                      'All Classes',
-                      Icons.category,
-                      Colors.blue,
-                      null,
+                  ),
+                  
+                  // Bottom action buttons
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100],
+                      border: Border(
+                        top: BorderSide(
+                          color: isDarkMode ? Colors.grey[800]! : Colors.grey[300]!,
+                          width: 1,
+                        ),
+                      ),
                     ),
-                    ..._availableClasses.map((classValue) => _buildFilterOption(
-                          classValue,
-                          Icons.medical_services,
-                          Colors.blue,
-                          classValue,
-                        )),
-                  ],
-                ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _selectedClass = null;
+                                _filterDrugs(_searchController.text);
+                              });
+                              Navigator.pop(context);
+                            },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('ڕێکخستنەوە'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: BorderSide(
+                                color: isDarkMode ? Colors.grey[700]! : Colors.grey[400]!,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _filterDrugs(_searchController.text);
+                              });
+                              Navigator.pop(context);
+                            },
+                            icon: const Icon(Icons.check_rounded, size: 18),
+                            label: Text(
+                              'جێبەجێکردن (${_filteredDrugs.length})',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: themeProvider.theme.colorScheme.primary,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
-
-  Widget _buildFilterOption(String text, IconData icon, Color color, String? value) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDarkMode = themeProvider.isDarkMode;
-
+  
+  Widget _buildFilterChip(
+    String label,
+    IconData icon,
+    Color color,
+    bool isSelected,
+    VoidCallback onTap,
+    bool isDarkMode,
+  ) {
     return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedClass = value;
-          _filterDrugs(_searchController.text);
-        });
-        Navigator.pop(context);
-      },
-      child: Container(
-        margin: EdgeInsets.only(bottom: 8),
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isDarkMode ? Colors.black12 : Colors.grey.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected
+              ? color
+              : isDarkMode
+                  ? Colors.grey[850]
+                  : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? color
+                : Colors.transparent,
+            width: 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 20,
-              ),
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? Colors.white
+                  : isDarkMode
+                      ? Colors.grey[400]
+                      : Colors.grey[700],
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 6),
             Text(
-              text,
+              label,
               style: TextStyle(
-                fontSize: 16,
-                color: isDarkMode ? Colors.white : Colors.black87,
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected
+                    ? Colors.white
+                    : isDarkMode
+                        ? Colors.grey[300]
+                        : Colors.grey[800],
               ),
+              textDirection: TextDirection.ltr,
             ),
-            Spacer(),
-            if (_selectedClass == value)
-              Icon(
+            if (isSelected) ...[
+              const SizedBox(width: 4),
+              const Icon(
                 Icons.check_circle,
-                color: color,
-                size: 20,
+                size: 14,
+                color: Colors.white,
               ),
+            ],
           ],
         ),
       ),
@@ -219,18 +354,58 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
   }
 
   Future<void> _loadDrugsData() async {
+    if (mounted) setState(() { _isLoading = true; _isOffline = false; });
+    final encCache = EncryptedCacheService();
+
     try {
-      final drugsList = await _syncService.loadCategoryData<Drug>('drugs');
-      if (mounted) {
-        setState(() {
-          _drugs = drugsList.where((drug) => drug.name.isNotEmpty).toList();
-          _filteredDrugs = _drugs;
-          _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
-          _isLoading = false;
-        });
+      final bool online = await ConnectivityService.isOnline();
+      if (mounted) setState(() => _isOffline = !online);
+
+      if (online) {
+        final drugsList = await _syncService.loadCategoryData<Drug>('drugs');
+        final filtered = drugsList.where((drug) => drug.name.isNotEmpty).toList();
+
+        // Save to encrypted cache for offline use
+        await encCache.saveDrugs(filtered.map((d) => d.toJson()).toList());
+
+        if (mounted) {
+          setState(() {
+            _drugs = filtered;
+            _filteredDrugs = _drugs;
+            _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
+            _isLoading = false;
+          });
+        }
+      } else {
+        // Offline: load from encrypted cache
+        final cached = await encCache.loadDrugs();
+        final drugs = cached.map((json) => Drug.fromJson(json)).where((d) => d.name.isNotEmpty).toList();
+
+        if (mounted) {
+          setState(() {
+            _drugs = drugs;
+            _filteredDrugs = _drugs;
+            _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
-      print('Error loading drugs: $e');
+      if (kDebugMode) debugPrint('Error loading drugs: $e');
+      try {
+        final cached = await encCache.loadDrugs();
+        final drugs = cached.map((json) => Drug.fromJson(json)).where((d) => d.name.isNotEmpty).toList();
+        if (mounted && drugs.isNotEmpty) {
+          setState(() {
+            _drugs = drugs;
+            _filteredDrugs = _drugs;
+            _availableClasses = _drugs.map((d) => d.drugClass).where((c) => c.isNotEmpty).toSet();
+            _isLoading = false;
+          });
+          return;
+        }
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -301,21 +476,21 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
         ),
         centerTitle: true,
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(60),
+          preferredSize: const Size.fromHeight(60),
           child: Container(
-            margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             decoration: BoxDecoration(
               color: themeProvider.isDarkMode
-                  ? Color(0xFF2C2C2C)
+                  ? const Color(0xFF2C2C2C)
                   : Colors.white,
               borderRadius: BorderRadius.circular(15),
               boxShadow: themeProvider.isDarkMode
                   ? null
                   : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 10,
-                        offset: Offset(0, 3),
+                        offset: const Offset(0, 3),
                       ),
                     ],
             ),
@@ -351,7 +526,7 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
                               : Colors.grey[400],
                         ) : null,
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
                     ),
                   ),
@@ -360,174 +535,184 @@ class _DrugsPageState extends State<DrugsPage> with SingleTickerProviderStateMix
                   height: 24,
                   width: 1,
                   color: themeProvider.isDarkMode
-                      ? Colors.white.withOpacity(0.12)
-                      : Colors.grey.withOpacity(0.2),
-                  margin: EdgeInsets.symmetric(horizontal: 8),
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.grey.withValues(alpha: 0.2),
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.filter_list,
-                    color: themeProvider.isDarkMode
-                        ? Colors.grey[600]
-                        : Colors.grey[400],
-                  ),
-                  onPressed: () => _showFilterOptions(context),
+                Stack(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.filter_list,
+                        color: themeProvider.isDarkMode
+                            ? Colors.grey[600]
+                            : Colors.grey[400],
+                      ),
+                      onPressed: () => _showFilterOptions(context),
+                    ),
+                    if (_selectedClass != null)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
       ),
-      body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    color: themeProvider.isDarkMode
-                        ? themeProvider.theme.colorScheme.primary
-                        : Colors.blue,
-                  ),
-                  SizedBox(height: 16),
-                  StreamBuilder<String>(
-                    stream: _syncService.statusStream,
-                    builder: (context, snapshot) {
-                      return Text(
-                        snapshot.data ?? 'Loading drugs...',
-                        style: TextStyle(
-                          color: themeProvider.isDarkMode
-                              ? Colors.grey[400]
-                              : Colors.grey[600],
-                          fontSize: 16,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            )
-          : _filteredDrugs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.medical_services_outlined,
-                        size: 80,
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[700]
-                            : Colors.grey[300],
+      body: Column(
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          if (_isOffline) const OfflineBanner(),
+          Expanded(
+            child: _isLoading
+                ? Center(
+                    child: LoadingAnimationWidget.threeArchedCircle(
+                      color: themeProvider.theme.colorScheme.primary,
+                      size: 50,
+                    ),
+                  )
+                : _filteredDrugs.isEmpty
+              ? (_isOffline
+                  ? OfflineErrorState(onRetry: _loadDrugsData)
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.medical_services_outlined,
+                            size: 80,
+                            color: themeProvider.isDarkMode
+                                ? Colors.grey[700]
+                                : Colors.grey[300],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'هیچ دەرمانێک نەدۆزرایەوە',
+                            style: TextStyle(
+                              color: themeProvider.isDarkMode
+                                  ? Colors.grey[500]
+                                  : Colors.grey[500],
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(height: 16),
-                      Text(
-                        'هیچ دەرمانێک نەدۆزرایەوە',
-                        style: TextStyle(
-                          color: themeProvider.isDarkMode
-                              ? Colors.grey[500]
-                              : Colors.grey[500],
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(
-                    physics: const BouncingScrollPhysics(),
-                  ),
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                    itemCount: _filteredDrugs.length,
-                    itemBuilder: (context, index) {
-                      final drug = _filteredDrugs[index];
-                      final isFavorite = favoritesProvider.isFavorite(drug);
+                    ))
+              : RefreshIndicator(
+                  onRefresh: _loadDrugsData,
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                      physics: const BouncingScrollPhysics(),
+                    ),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                      itemCount: _filteredDrugs.length,
+                      itemBuilder: (context, index) {
+                        final drug = _filteredDrugs[index];
+                        final isFavorite = favoritesProvider.isFavorite(drug);
 
-                      return Container(
-                        margin: EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: themeProvider.isDarkMode
-                              ? Color(0xFF1E1E1E)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: themeProvider.isDarkMode
-                              ? null
-                              : [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: Offset(0, 2),
-                                  ),
-                                ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _onDrugTap(context, drug),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: themeProvider.isDarkMode
+                                ? const Color(0xFF1E1E1E)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          drug.name,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: themeProvider.isDarkMode
-                                                ? Colors.white
-                                                : Colors.black87,
-                                          ),
-                                        ),
-                                        if (drug.drugClass.isNotEmpty) ...[
-                                          SizedBox(height: 4),
+                            boxShadow: themeProvider.isDarkMode
+                                ? null
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.05),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _onDrugTap(context, drug),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            drug.drugClass,
+                                            drug.name,
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
                                               color: themeProvider.isDarkMode
-                                                  ? Colors.grey[400]
-                                                  : Colors.grey[600],
+                                                  ? Colors.white
+                                                  : Colors.black87,
                                             ),
                                           ),
+                                          if (drug.drugClass.isNotEmpty) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              drug.drugClass,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: themeProvider.isDarkMode
+                                                    ? Colors.grey[400]
+                                                    : Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(
-                                      isFavorite
-                                          ? Icons.bookmark
-                                          : Icons.bookmark_border,
-                                      color: isFavorite
-                                          ? (themeProvider.isDarkMode
-                                              ? Colors.blue.shade300
-                                              : Colors.blue.shade700)
-                                          : (themeProvider.isDarkMode
-                                              ? Colors.grey[600]
-                                              : Colors.grey[400]),
+                                    IconButton(
+                                      icon: Icon(
+                                        isFavorite
+                                            ? Icons.bookmark
+                                            : Icons.bookmark_border,
+                                        color: isFavorite
+                                            ? (themeProvider.isDarkMode
+                                                ? const Color(0xFF4A7EB5)
+                                                : const Color(0xFF1A3460))
+                                            : (themeProvider.isDarkMode
+                                                ? Colors.grey[600]
+                                                : Colors.grey[400]),
+                                      ),
+                                      onPressed: () {
+                                        if (isFavorite) {
+                                          favoritesProvider.removeFavorite(drug);
+                                        } else {
+                                          favoritesProvider.addFavorite(drug);
+                                        }
+                                      },
                                     ),
-                                    onPressed: () {
-                                      if (isFavorite) {
-                                        favoritesProvider.removeFavorite(drug);
-                                      } else {
-                                        favoritesProvider.addFavorite(drug);
-                                      }
-                                    },
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
+          ),
+        ],
+      ),
     );
   }
 }

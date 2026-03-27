@@ -30,7 +30,7 @@ extension TerminologyClassExtension on TerminologyClass {
   Color get color {
     switch (this) {
       case TerminologyClass.antibiotic:
-        return Colors.blue.shade700;
+        return const Color(0xFF1A3460);
       case TerminologyClass.painkiller:
         return Colors.red.shade700;
       case TerminologyClass.antiviral:
