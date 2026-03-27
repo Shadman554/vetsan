@@ -1,0 +1,36 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    working_directory: vetstan
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          cd vetstan
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          cd vetstan
+          flutter packages pub get
+      - name: Install pods
+        script: |
+          cd vetstan
+          find . -name "Podfile" -execdir pod install \;
+      - name: Flutter build ipa
+        script: |
+          cd vetstan
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - vetstan/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - vetstan/flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
