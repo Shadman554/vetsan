@@ -15,11 +15,11 @@ workflows:
       - name: Install pods
         script: |
           find . -name "Podfile" -execdir pod install \;
-      - name: Flutter build ipa
+      - name: Flutter build iOS (unsigned)
         script: |
-          flutter build ipa --release --no-codesign
+          flutter build ios --release --no-codesign
     artifacts:
-      - build/ios/ipa/*.ipa
+      - build/ios/Release-iphoneos/*.app
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
     publishing:
